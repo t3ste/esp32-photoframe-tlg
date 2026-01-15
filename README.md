@@ -3,6 +3,11 @@ Extended version of [aitjcize's ESP32-S3 PhotoFrame](https://aitjcize.github.io/
 
 ---
 
+![PhotoFrame](.img/photo1.jpg)
+
+![PhotoFrame](.img/image.jpg)
+
+
 ## Feature Status
 
 Legend: :white_check_mark: = Tested and Working | :grey_question: = Untested/In Progress
