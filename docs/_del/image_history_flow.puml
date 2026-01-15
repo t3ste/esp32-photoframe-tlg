@@ -125,7 +125,7 @@ partition "Add to History" {
 
 stop
 
-note bottom
+note right
   **Image History Features**
   - Stores MD5 hashes of displayed images
   - Prevents showing same image twice
