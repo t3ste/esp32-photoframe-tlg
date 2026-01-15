@@ -1,0 +1,357 @@
+@startuml ESP32_PhotoFrame_Complete_Flow
+!theme plain
+skinparam backgroundColor #FFFFFF
+skinparam defaultFontSize 11
+skinparam arrowThickness 2
+skinparam packageBorderColor #333333
+
+title ESP32-S3 PhotoFrame - Complete System Flow Decision Tree
+
+start
+
+:System Wake-Up / Boot;
+
+if (Reset Reason?) then (DEEP_SLEEP)
+  :Load wakeup cause from\nespsleep_get_wakeup_causes();
+
+  if (Wakeup Source?) then (TIMER_WAKEUP)
+    :Auto-Rotation Cycle;
+    #LightBlue:TIMER WAKEUP Flow;
+    -> GOTO: TIMER_FLOW;
+
+  elseif (EXT1: BOOT_BUTTON) then (yes)
+    :Web Interface Mode;
+    #LightGreen:BOOT BUTTON Flow;
+    -> GOTO: BOOT_FLOW;
+
+  elseif (EXT1: KEY_BUTTON) then (yes)
+    :Manual Rotation;
+    #LightYellow:KEY BUTTON Flow;
+    -> GOTO: KEY_FLOW;
+
+  else (undefined)
+    :Unexpected wakeup;
+    -> GOTO: POWER_ON_FLOW;
+  endif
+
+else (POWER_ON, SW_RESET, PANIC, WDT)
+  :First boot or crash recovery;
+  #Orange:POWER-ON Flow;
+  -> GOTO: POWER_ON_FLOW;
+endif
+
+partition "TIMER_WAKEUP Flow" #LightBlue {
+  :System Init:\n- I2C, AXP2101\n- NVS, SD Card\n- Power Manager\n- Display Manager;
+
+  if (USB Connected?) then (YES)
+    #Pink:USB powered - stay awake;
+    :Skip WiFi initialization;
+    :Display update immediately;
+    :Active rotation timer enabled;
+    :Web interface available;
+    stop
+
+  else (NO - Battery Mode)
+    if (Battery ≤ 20% AND\nNOT charging?) then (YES)
+      #Red:**BATTERY LOW MODE**;
+      :Save current interval to NVS;
+      :Set rotate_interval = 21600s (6h);
+      :battery_low_mode_active = TRUE;
+      note right
+        Deactivated when:
+        - Battery ≥ 80% OR
+        - Charging OR
+        - USB connected
+      end note
+    endif
+
+    if (check_telegram_on_timer_wakeup?) then (TRUE)
+      #Cyan:**Initialize WiFi**;
+
+      partition "WiFi Initialization" {
+        :telegram_bot_init();
+
+        if (WiFi credentials in NVS?) then (YES)
+          :Load SSID/Password from NVS;
+          :wifi_manager_connect();
+
+        elseif (WiFi credentials on SD?) then (YES: sdcard/wifi.txt)
+          :Read wifi.txt from SD card;
+          :wifi_manager_connect();
+          if (Connection successful?) then (YES)
+            :Save credentials to NVS;
+            :Rename wifi.txt to wifi.bak;
+          else (FAILED)
+            :Keep wifi.txt;
+            -> WiFi Failed;
+          endif
+
+        else (NO credentials found)
+          :Start Provisioning AP;
+          :SSID: "PhotoFrame"\nPassword: "photoframe";
+          :Wait for configuration\nvia http://192.168.4.1;
+          note right
+            This path blocks
+            until configured
+          end note
+        endif
+
+        :Wait for WiFi connection\n(max 10s timeout);
+
+        if (WiFi connected?) then (YES)
+          :Start mDNS service\n(photoframe.local);
+          #Cyan:**WiFi = ON**;
+        else (TIMEOUT)
+          :WiFi connection failed;
+          #Gray:**WiFi = OFF**;
+          -> Skip Telegram;
+        endif
+      }
+
+      if (WiFi = ON?) then (YES)
+        :telegram_bot_check_updates();
+
+        if (Updates found?) then (YES - Messages/Commands)
+          #Yellow:**POLLING MODE**;
+          :pending_display_update = TRUE;
+          :Start telegram_check_task();
+
+          partition "Telegram Polling (60s timeout)" {
+            repeat
+              :Process update;
+              :Reset last_update_time;
+              :power_manager_reset_sleep_timer();
+
+              if (Display command?) then (/display, /txt, photo+"show")
+                :Execute display update;
+                :display_was_updated_by_telegram = TRUE;
+                :pending_display_update = FALSE;
+              endif
+
+              :Wait poll_interval (1s);
+
+            repeat while (New updates AND\ntimeout < 60s?) is (YES)
+            -> NO or Timeout;
+
+            :Send "Polling Complete" notification\nwith duration and update count;
+            :Wait for notification to send (2s);
+          }
+
+          if (display_was_updated_by_telegram?) then (TRUE)
+            :Display already updated\nduring polling;
+
+          else (FALSE - pending_display_update = TRUE)
+            if (notify_on_display_update?) then (TRUE)
+              :Get next random image;
+              :Send display notification\n+ thumbnail upload;
+              :Wait for upload (max 10s);
+            endif
+
+            #Cyan:**WiFi = OFF**;
+            :wifi_manager_stop();
+            :Wait 500ms;
+
+            :Display update;
+            :display_manager_handle_wakeup();
+          endif
+
+        else (NO - No updates)
+          if (notify_on_timer_wakeup?) then (TRUE)
+            :Check battery status;
+
+            if (Battery ≤ 20% AND NOT charging?) then (YES)
+              :Send "⚠️ Low Battery Alert"\nwith battery percentage;
+              :Wait 1s;
+            endif
+
+            :Send "Wake Up" notification\nwith battery status;
+            :Wait 2s;
+          endif
+
+          if (notify_on_display_update?) then (TRUE)
+            :Get next random image;
+            :Send display notification\n+ thumbnail upload;
+            :Wait for upload (max 10s);
+          endif
+
+          #Cyan:**WiFi = OFF**;
+          :wifi_manager_stop();
+          :Wait 1s;
+
+          :Display update;
+          :display_manager_handle_wakeup();
+        endif
+
+      else (NO - WiFi failed)
+        :Skip Telegram notifications;
+        :Display update immediately;
+        :display_manager_handle_wakeup();
+      endif
+
+    else (FALSE - Telegram disabled)
+      #Gray:**WiFi = OFF** (not initialized);
+      :Display update immediately;
+      :display_manager_handle_wakeup();
+    endif
+
+    if (notify_on_sleep?) then (TRUE)
+      if (WiFi = OFF?) then (YES)
+        #Cyan:**WiFi = ON**;
+        :Initialize WiFi\n(use saved credentials);
+        :Wait for connection (5s);
+      endif
+
+      if (WiFi connected?) then (YES)
+        :Get current config\n(rotate_interval, auto_rotate, deep_sleep);
+        :Get battery status;
+        :Send "Going to Sleep" notification\nwith config and battery info;
+        :Wait 2s for message to send;
+      endif
+    endif
+
+    #Cyan:**WiFi = OFF**;
+    :Ensure WiFi stopped;
+    :wifi_manager_stop();
+
+    :Enter Deep Sleep;
+    :esp_sleep_enable_timer_wakeup(rotate_interval);
+    :esp_sleep_enable_ext1_wakeup(BOOT|KEY);
+    :esp_deep_sleep_start();
+
+    stop
+  endif
+}
+
+partition "KEY_BUTTON Flow" #LightYellow {
+  :System Init (minimal);
+  note right
+    No WiFi initialization
+    No Telegram
+    Battery efficient
+  end note
+
+  #Gray:**WiFi = OFF**;
+
+  :Display update immediately;
+  :display_manager_handle_wakeup();
+  :- Select random unseen image\n- Update e-paper display (~30s);
+
+  :Enter Deep Sleep;
+  :Timer = rotate_interval;
+
+  stop
+}
+
+partition "BOOT_BUTTON Flow" #LightGreen {
+  :System Init (complete):\n- I2C, AXP2101, NVS, SD\n- Display, Power, Albums;
+
+  partition "WiFi Initialization" {
+    if (WiFi credentials in NVS?) then (YES)
+      :wifi_manager_connect(NVS);
+
+    elseif (WiFi on SD: wifi.txt?) then (YES)
+      :Load from SD card;
+      :wifi_manager_connect();
+      if (Success?) then (YES)
+        :Save to NVS;
+        :Rename wifi.txt → wifi.bak;
+      endif
+
+    else (NO credentials)
+      :Start AP Mode;
+      :SSID: "PhotoFrame"\nPW: "photoframe";
+      :Wait for web config;
+    endif
+
+    :Wait for connection (10s);
+
+    if (Connected?) then (YES)
+      #Cyan:**WiFi = ON**;
+      :Start mDNS service;
+    else (FAILED)
+      #Cyan:**WiFi = ON** (AP mode);
+      :Provisioning mode active;
+    endif
+  }
+
+  :Start HTTP Server;
+  :http://photoframe.local;
+  :All API endpoints available;
+
+  :Initialize Telegram Bot;
+  :telegram_bot_init();
+
+  if (Telegram configured AND WiFi connected?) then (YES)
+    if (notify_on_timer_wakeup?) then (TRUE)
+      :Send "Wake Up" notification\n(BOOT button wakeup);
+    endif
+
+    :Start telegram polling task;
+    :Background processing;
+  endif
+
+  if (USB connected?) then (YES)
+    #Pink:**Powered by USB**;
+    :Stay awake indefinitely;
+    :deep_sleep_enabled = TRUE;
+    :Active rotation timer enabled;
+    :Auto-sleep DISABLED;
+    :RED LED = ON;
+
+    stop
+
+  else (NO - Battery powered)
+    if (deep_sleep_enabled?) then (TRUE)
+      #Yellow:**Battery mode with auto-sleep**;
+      :Start auto-sleep timer (120s);
+      :GREEN LED blinks every 10s;
+      :Log countdown every 30s;
+
+      repeat
+        :Wait 1s;
+        :Check for activity;
+        note right
+          Activity resets timer:
+          - BOOT/KEY button press
+          - HTTP request
+          - Telegram update
+        end note
+
+        if (Timeout reached?) then (YES)
+          :Enter Deep Sleep;
+          :Timer = rotate_interval;
+          stop
+        endif
+
+      repeat while (Activity detected?) is (YES)
+      -> Timeout;
+
+    else (FALSE - deep_sleep disabled)
+      :Stay awake on battery;
+      :Active rotation enabled;
+      :RED LED = OFF (save battery);
+
+      stop
+    endif
+  endif
+}
+
+partition "POWER_ON Flow" #Orange {
+  :Log reset reason:\n- POWER_ON\n- SW_RESET\n- PANIC\n- WATCHDOG;
+
+  :Complete initialization:\n- I2C + AXP2101\n- NVS Flash\n- SD Card\n- All managers;
+
+  :Initialize WiFi (same as BOOT flow);
+  #Cyan:**WiFi = ON**;
+
+  :Start HTTP Server;
+  :Initialize Telegram;
+
+  :System ready;
+  :→ Enter Web Interface Mode;
+
+  -> Same as BOOT_BUTTON Flow;
+  stop
+}
+
+@enduml

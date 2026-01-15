@@ -11,7 +11,6 @@ static const char *TAG = "config_manager";
 static int rotate_interval = IMAGE_ROTATE_INTERVAL_SEC;
 static bool auto_rotate_enabled = false;
 static char image_url[IMAGE_URL_MAX_LEN] = {0};
-static char ha_url[HA_URL_MAX_LEN] = {0};
 static rotation_mode_t rotation_mode = ROTATION_MODE_SDCARD;
 static bool save_downloaded_images = true;
 
@@ -56,16 +55,6 @@ esp_err_t config_manager_init(void)
             save_downloaded_images = (stored_save_dl != 0);
             ESP_LOGI(TAG, "Loaded save_downloaded_images from NVS: %s",
                      save_downloaded_images ? "yes" : "no");
-        }
-
-        size_t ha_url_len = HA_URL_MAX_LEN;
-        if (nvs_get_str(nvs_handle, NVS_HA_URL_KEY, ha_url, &ha_url_len) == ESP_OK) {
-            ESP_LOGI(TAG, "Loaded HA URL from NVS: %s", ha_url);
-        } else {
-            // Set default (empty) if not configured
-            strncpy(ha_url, DEFAULT_HA_URL, HA_URL_MAX_LEN - 1);
-            ha_url[HA_URL_MAX_LEN - 1] = '\0';
-            ESP_LOGI(TAG, "No HA URL in NVS, using default (empty)");
         }
 
         nvs_close(nvs_handle);
@@ -177,26 +166,4 @@ void config_manager_set_save_downloaded_images(bool enabled)
 bool config_manager_get_save_downloaded_images(void)
 {
     return save_downloaded_images;
-}
-
-void config_manager_set_ha_url(const char *url)
-{
-    if (url) {
-        strncpy(ha_url, url, HA_URL_MAX_LEN - 1);
-        ha_url[HA_URL_MAX_LEN - 1] = '\0';
-
-        nvs_handle_t nvs_handle;
-        if (nvs_open(NVS_NAMESPACE, NVS_READWRITE, &nvs_handle) == ESP_OK) {
-            nvs_set_str(nvs_handle, NVS_HA_URL_KEY, ha_url);
-            nvs_commit(nvs_handle);
-            nvs_close(nvs_handle);
-        }
-
-        ESP_LOGI(TAG, "HA URL set to: %s", ha_url);
-    }
-}
-
-const char *config_manager_get_ha_url(void)
-{
-    return ha_url;
 }

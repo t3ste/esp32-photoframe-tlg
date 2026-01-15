@@ -1,0 +1,75 @@
+@startuml ESP32_PhotoFrame_Enter_Sleep
+title ESP32-S3 Photo Frame - Enter Deep Sleep Flow
+
+start
+
+:Enter Sleep Requested;
+
+:Disable Auto Light Sleep;
+
+:Turn Off LEDs;
+note right
+  Save power during sleep
+  (Active-low LEDs)
+end note
+
+if (notify_on_sleep
+Enabled?) then (Yes)
+  if (Telegram Configured
+AND WiFi Connected?) then (Yes)
+    :Send Sleep Notification;
+    note right
+      Message includes:
+      - Configuration
+      - Battery status
+      - Next wakeup time
+    end note
+    :Wait 2s for Send;
+  endif
+endif
+
+if (Auto-Rotate
+Enabled?) then (Yes)
+  :Calculate Next Wake Time;
+  note right
+    Based on rotation interval
+    (affected by battery low mode)
+  end note
+
+  :Enable Timer Wakeup;
+  note right
+    esp_sleep_enable_timer_wakeup()
+    Interval in microseconds
+  end note
+
+else (Auto-Rotate Disabled)
+  :No Timer Wakeup;
+  note right
+    Only button wake enabled
+  end note
+endif
+
+:Enable Button Wakeup;
+note right
+  ESP_EXT1_WAKEUP_ANY_LOW
+  - BOOT_BUTTON (GPIO)
+  - KEY_BUTTON (GPIO)
+end note
+
+:Hold GPIO State;
+note right
+  Prevents floating pins
+  during deep sleep
+end note
+
+:Configure AXP2101 for Sleep;
+
+:Enter Deep Sleep;
+note right
+  esp_deep_sleep_start()
+  System halts until wakeup
+end note
+
+stop
+
+@enduml

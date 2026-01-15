@@ -15,6 +15,10 @@
 #include "nvs.h"
 #include "nvs_flash.h"
 
+// WiFi credentials file on SD card
+#include <stdio.h>
+#include <sys/stat.h>
+
 static const char *TAG = "wifi_manager";
 
 #define WIFI_CONNECTED_BIT BIT0
@@ -23,10 +27,39 @@ static const char *TAG = "wifi_manager";
 static EventGroupHandle_t s_wifi_event_group;
 static int s_retry_num = 0;
 static bool s_is_connected = false;
+static bool s_suppress_reconnect = false;
+
+esp_err_t wifi_manager_stop_immediate(void)
+{
+    ESP_LOGI(TAG, "Stopping WiFi immediately without reconnect...");
+
+    // Set flag to suppress reconnect in event handler
+    s_suppress_reconnect = true;
+
+    // Disconnect first
+    esp_wifi_disconnect();
+    vTaskDelay(pdMS_TO_TICKS(100));
+
+    // Stop WiFi
+    esp_err_t err = esp_wifi_stop();
+    if (err == ESP_OK) {
+        s_is_connected = false;
+        ESP_LOGI(TAG, "WiFi stopped successfully");
+    } else {
+        ESP_LOGW(TAG, "WiFi stop failed: %s", esp_err_to_name(err));
+    }
+
+    return err;
+}
 
 static void event_handler(void *arg, esp_event_base_t event_base, int32_t event_id,
                           void *event_data)
 {
+    if (s_suppress_reconnect) {
+        ESP_LOGD(TAG, "Reconnect suppressed");
+        return;
+    }
+
     if (event_base == WIFI_EVENT && event_id == WIFI_EVENT_STA_START) {
         esp_wifi_connect();
     } else if (event_base == WIFI_EVENT && event_id == WIFI_EVENT_STA_DISCONNECTED) {
@@ -106,6 +139,9 @@ esp_err_t wifi_manager_connect(const char *ssid, const char *password)
     ESP_ERROR_CHECK(esp_wifi_set_config(WIFI_IF_STA, &wifi_config));
     ESP_ERROR_CHECK(esp_wifi_start());
 
+    // Reset reconnect suppression flag
+    s_suppress_reconnect = false;
+
     s_retry_num = 0;
     xEventGroupClearBits(s_wifi_event_group, WIFI_CONNECTED_BIT | WIFI_FAIL_BIT);
     EventBits_t bits = xEventGroupWaitBits(s_wifi_event_group, WIFI_CONNECTED_BIT | WIFI_FAIL_BIT,
@@ -127,6 +163,32 @@ esp_err_t wifi_manager_disconnect(void)
 {
     s_is_connected = false;
     return esp_wifi_disconnect();
+}
+
+// WiFi shut down
+esp_err_t wifi_manager_stop(void)
+{
+    ESP_LOGI(TAG, "Stopping WiFi completely...");
+
+    s_is_connected = false;
+    s_retry_num = 5;  // Values greater than 5 to simulate attempts IMPORTANT: Prevents
+                      // auto-reconnect in the event handler!
+
+    esp_err_t err = esp_wifi_disconnect();
+    if (err != ESP_OK) {
+        ESP_LOGW(TAG, "WiFi disconnect failed: %s", esp_err_to_name(err));
+    }
+
+    vTaskDelay(pdMS_TO_TICKS(100));
+
+    err = esp_wifi_stop();
+    if (err != ESP_OK) {
+        ESP_LOGW(TAG, "WiFi stop failed: %s", esp_err_to_name(err));
+        return err;
+    }
+
+    ESP_LOGI(TAG, "WiFi stopped successfully");
+    return ESP_OK;
 }
 
 bool wifi_manager_is_connected(void)
@@ -210,4 +272,80 @@ esp_err_t wifi_manager_load_credentials(char *ssid, char *password)
 EventGroupHandle_t wifi_manager_get_event_group(void)
 {
     return s_wifi_event_group;
+}
+
+// ============================================================================
+// WIFI SD-CARD CREDENTIALS on SD card
+// ============================================================================
+
+// WiFi credentials file on SD card
+bool wifi_manager_has_stored_credentials(void)
+{
+    nvs_handle_t nvs_handle;
+    esp_err_t err;
+
+    err = nvs_open(NVS_NAMESPACE, NVS_READONLY, &nvs_handle);
+    if (err != ESP_OK) {
+        return false;
+    }
+
+    // Check if SSID exists
+    size_t ssid_len = 0;
+    err = nvs_get_str(nvs_handle, NVS_WIFI_SSID_KEY, NULL, &ssid_len);
+    nvs_close(nvs_handle);
+
+    return (err == ESP_OK && ssid_len > 0);
+}
+
+esp_err_t wifi_manager_load_credentials_from_sd(char *ssid, char *password)
+{
+    if (!ssid || !password) {
+        return ESP_ERR_INVALID_ARG;
+    }
+
+    ESP_LOGI(TAG, "Attempting to load WiFi credentials from SD card...");
+
+    // Check if file exists
+    struct stat st;
+    if (stat(WIFI_CREDENTIALS_FILE, &st) != 0) {
+        ESP_LOGD(TAG, "WiFi credentials file not found: %s", WIFI_CREDENTIALS_FILE);
+        return ESP_ERR_NOT_FOUND;
+    }
+
+    FILE *f = fopen(WIFI_CREDENTIALS_FILE, "r");
+    if (!f) {
+        ESP_LOGE(TAG, "Failed to open WiFi credentials file");
+        return ESP_FAIL;
+    }
+
+    // Read SSID (line 1)
+    if (!fgets(ssid, WIFI_SSID_MAX_LEN, f)) {
+        ESP_LOGE(TAG, "Failed to read SSID from file");
+        fclose(f);
+        return ESP_FAIL;
+    }
+
+    // Remove newline/carriage return
+    ssid[strcspn(ssid, "\r\n")] = 0;
+
+    // Read PASSWORD (line 2)
+    if (!fgets(password, WIFI_PASS_MAX_LEN, f)) {
+        ESP_LOGE(TAG, "Failed to read password from file");
+        fclose(f);
+        return ESP_FAIL;
+    }
+
+    // Remove newline/carriage return
+    password[strcspn(password, "\r\n")] = 0;
+
+    fclose(f);
+
+    // Validate
+    if (strlen(ssid) == 0) {
+        ESP_LOGE(TAG, "SSID is empty in credentials file");
+        return ESP_FAIL;
+    }
+
+    ESP_LOGI(TAG, "WiFi credentials loaded from SD card: SSID='%s'", ssid);
+    return ESP_OK;
 }

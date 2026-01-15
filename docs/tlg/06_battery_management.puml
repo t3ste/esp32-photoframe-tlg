@@ -1,0 +1,93 @@
+@startuml ESP32_PhotoFrame_Battery_Management
+title ESP32-S3 Photo Frame - Battery Management Flow
+
+start
+
+:Battery Check Triggered;
+
+:Read Battery Status;
+note right
+  - Percentage
+  - Voltage (AXP2101)
+  - Charging status
+  - USB connected
+end note
+
+if (Battery State?) then (< 20% - CRITICAL)
+  :Battery State = CRITICAL;
+
+  if (Charging
+or USB?) then (Yes)
+    :No Action;
+    note right
+      System powered externally
+    end note
+  else (On Battery)
+    if (notify_on_timer_wakeup?) then (Yes)
+      :Send Critical Battery
+Telegram Warning;
+    endif
+
+    :Audio Warning;
+    note right
+      Play critical battery sound
+      (if audio enabled)
+    end note
+  endif
+
+elseif (< 20% - LOW) then
+  :Battery State = LOW;
+
+  if (NOT Charging
+AND NOT USB
+AND Battery Present?) then (Yes)
+    :Activate Battery Low Mode;
+    note right
+      Save current rotation interval
+      Set rotation to 6 hours (21600s)
+    end note
+
+    if (notify_on_timer_wakeup?) then (Yes)
+      :Send Low Battery
+Telegram Warning;
+    endif
+
+    :Audio Warning;
+    note right
+      Play low battery sound
+      (if audio enabled)
+    end note
+  else (External Power)
+    :Deactivate Battery Low Mode;
+    :Restore Normal Rotation;
+  endif
+
+else (≥ 80% - NORMAL)
+  :Battery State = NORMAL;
+
+  if (Battery Low Mode
+Active?) then (Yes)
+    :Deactivate Battery Low Mode;
+    :Restore Saved Rotation Interval;
+    note right
+      Recovery from low battery
+    end note
+  endif
+
+  :Audio Recovery Sound;
+  note right
+    Play battery recovered sound
+    (if audio enabled)
+  end note
+endif
+
+:Update Battery State;
+:Red LED Indicator;
+note right
+  LED ON = Deep sleep enabled (battery mode)
+  LED OFF = Deep sleep disabled or USB
+end note
+
+stop
+
+@enduml

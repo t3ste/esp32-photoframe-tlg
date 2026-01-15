@@ -336,20 +336,12 @@ Get current configuration.
 **Response:**
 ```json
 {
-  "rotate_interval": 3600,
-  "auto_rotate": true,
-  "deep_sleep_enabled": true,
-  "image_url": "https://picsum.photos/800/480",
-  "rotation_mode": "url"
+  "rotate_interval": 60,
+  "auto_rotate": false,
+  "brightness_fstop": 0.3,
+  "contrast": 1.3
 }
 ```
-
-**Fields:**
-- `rotate_interval`: Rotation interval in seconds (10-86400)
-- `auto_rotate`: Whether automatic image rotation is enabled
-- `deep_sleep_enabled`: Whether deep sleep mode is enabled (for battery saving)
-- `image_url`: URL to fetch images from (empty string if not set)
-- `rotation_mode`: Image rotation mode - `"sdcard"` or `"url"`
 
 ---
 
@@ -360,26 +352,18 @@ Update configuration.
 **Request:**
 ```json
 {
-  "rotate_interval": 3600,
+  "rotate_interval": 120,
   "auto_rotate": true,
-  "deep_sleep_enabled": true,
-  "image_url": "https://picsum.photos/800/480",
-  "rotation_mode": "url"
+  "brightness_fstop": 0.5,
+  "contrast": 1.5
 }
 ```
 
 **Parameters:**
-- `rotate_interval`: Rotation interval in seconds (10-86400)
-- `auto_rotate`: Enable/disable automatic image rotation (boolean)
-- `deep_sleep_enabled`: Enable/disable deep sleep mode (boolean)
-  - When enabled: Device enters deep sleep between rotations (~100µA power consumption)
-  - When disabled: Device stays awake with HTTP server running (for Home Assistant integration)
-- `image_url`: URL to fetch images from (string, max 256 characters)
-  - Example: `"https://picsum.photos/800/480"` for random images
-  - Set to empty string `""` to clear
-- `rotation_mode`: Image rotation mode (string)
-  - `"sdcard"`: Rotate through images on SD card
-  - `"url"`: Fetch and display image from the configured URL
+- `rotate_interval`: Rotation interval in seconds (10-3600)
+- `auto_rotate`: Enable/disable automatic image rotation
+- `brightness_fstop`: Brightness adjustment in f-stops (-2.0 to 2.0)
+- `contrast`: Contrast multiplier (0.5 to 2.0, 1.0 = normal)
 
 **Response:**
 ```json
@@ -387,13 +371,6 @@ Update configuration.
   "status": "success"
 }
 ```
-
-**Notes:**
-- `rotation_mode` determines which source is used for image rotation
-- When `rotation_mode` is `"url"`, the device will download the image from `image_url` on each wakeup
-- When `rotation_mode` is `"sdcard"`, the device rotates through enabled albums on the SD card
-- The `image_url` is saved independently of `rotation_mode`, so you can switch modes without losing the URL
-- Downloaded images are saved to the "Downloads" album on the SD card
 
 ---
 

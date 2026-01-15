@@ -1,0 +1,85 @@
+@startuml ESP32_PhotoFrame_WiFi_Initialization
+title ESP32-S3 Photo Frame - WiFi Initialization Flow
+
+start
+
+:WiFi Manager Init;
+
+:Try Load Credentials from NVS;
+
+if (NVS Credentials
+Found?) then (Yes)
+  :Load SSID & Password;
+  note right
+    Previously saved credentials
+  end note
+  #palegreen:Try Connect;
+
+else (No)
+  :Try Load from SD Card;
+  note right
+    File: /sdcard/wifi.txt
+    Format:
+    Line 1: SSID
+    Line 2: Password
+  end note
+
+  if (SD File Exists?) then (Yes)
+    :Load SSID & Password from SD;
+    #palegreen:Try Connect;
+  else (No)
+    :Start Provisioning AP;
+    note right
+      SSID: PhotoFrame-XXXX
+      Password: photoframe
+      IP: 192.168.4.1
+    end note
+
+    :Wait for User Configuration;
+    note right
+      User connects to AP
+      Opens http://192.168.4.1
+      Enters WiFi credentials
+    end note
+
+    :Credentials Received;
+    #palegreen:Try Connect;
+  endif
+endif
+
+#palegreen:Connect to WiFi;
+
+if (Connection
+Successful?) then (Yes)
+  if (Credentials from SD?) then (Yes)
+    :Save to NVS;
+    :Rename wifi.txt to wifi.bak;
+  endif
+
+  :Start mDNS Service;
+  note right
+    Hostname: photoframe.local
+  end note
+
+  :WiFi Connected;
+  stop
+
+else (No - Timeout)
+  if (Suppress Reconnect?) then (Yes)
+    :Stop WiFi;
+    note right
+      Used when WiFi needed
+      temporarily (Telegram check)
+    end note
+  else (No)
+    :Keep WiFi Active;
+    note right
+      For web interface
+    end note
+  endif
+
+  :WiFi Failed;
+  stop
+endif
+
+@enduml

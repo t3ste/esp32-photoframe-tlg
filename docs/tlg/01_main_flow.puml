@@ -1,0 +1,48 @@
+@startuml ESP32_PhotoFrame_Main_Flow
+title ESP32-S3 Photo Frame - Main System Flow
+
+start
+
+:System Boot;
+note right
+  Reset Reasons:
+  - Power-on
+  - Deep Sleep Wake
+  - Software Reset
+end note
+
+:Initialize Hardware;
+note right
+  - I2C Bus
+  - AXP2101 Power IC
+  - NVS Flash
+  - SD Card
+  - Display Manager
+  - Power Manager
+end note
+
+:Check Wake Source;
+
+if (Wake Source?) then (TIMER_WAKEUP)
+  :Timer Wake Flow;
+  #lightblue:[[#timer_wakeup Timer Wake Details]];
+
+elseif (KEY_BUTTON) then
+  :Manual Rotation;
+  #lightgreen:[[#button_wakeup Button Wake Details]];
+  :Display Next Image;
+  :Enter Deep Sleep;
+  stop
+
+elseif (BOOT_BUTTON or POWER_ON) then
+  :Normal Operation Mode;
+  #yellow:[[#normal_operation Normal Operation Details]];
+
+else (UNDEFINED)
+  :Normal Operation Mode;
+  #yellow:[[#normal_operation Normal Operation Details]];
+endif
+
+stop
+
+@enduml

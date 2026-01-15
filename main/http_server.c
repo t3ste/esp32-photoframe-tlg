@@ -21,6 +21,10 @@
 #include "image_processor.h"
 #include "power_manager.h"
 #include "processing_settings.h"
+// v1.9.0_tlg Telegram START
+#include "api_handlers.h"
+#include "telegram_bot.h"
+// v1.9.0_tlg Telegram END
 
 #ifndef MIN
 #define MIN(a, b) ((a) < (b) ? (a) : (b))
@@ -47,6 +51,241 @@ extern const uint8_t calibration_bmp_end[] asm("_binary_calibration_bmp_end");
 extern const uint8_t measurement_sample_jpg_start[] asm("_binary_measurement_sample_jpg_start");
 extern const uint8_t measurement_sample_jpg_end[] asm("_binary_measurement_sample_jpg_end");
 
+// Add handlers
+static esp_err_t telegram_config_handler(httpd_req_t *req)
+{
+    if (!system_ready) {
+        httpd_resp_set_status(req, HTTPD_503);
+        httpd_resp_sendstr(req, "System is still initializing");
+        return ESP_FAIL;
+    }
+
+    power_manager_reset_sleep_timer();
+
+    if (req->method == HTTP_GET) {
+        char token[TELEGRAM_TOKEN_MAX_LEN] = {0};
+        ESP_LOGI(TAG, ">>> Before telegram check");
+        bool has_token = telegram_bot_has_token();
+
+        if (has_token) {
+            telegram_bot_get_token(token, sizeof(token));
+            ESP_LOGI(TAG, ">>> Telegram has token");
+        }
+
+        cJSON *root = cJSON_CreateObject();
+        cJSON_AddBoolToObject(root, "configured", has_token);
+        if (has_token) {
+            telegram_bot_get_token(token, sizeof(token));
+            int len = strlen(token);
+
+            cJSON *root = cJSON_CreateObject();
+            cJSON_AddBoolToObject(root, "configured", has_token);
+
+            // Show format: "��������" + last 4 chars (total 12 chars max)
+            char masked[16];
+            if (len > 4) {
+                snprintf(masked, sizeof(masked), "********%s", token + len - 4);
+            } else {
+                strncpy(masked, "********", sizeof(masked) - 1);
+                masked[sizeof(masked) - 1] = '\0';
+            }
+            cJSON_AddStringToObject(root, "token_masked", masked);
+        }
+
+        char *json_str = cJSON_Print(root);
+        httpd_resp_set_type(req, "application/json");
+        httpd_resp_sendstr(req, json_str);
+        free(json_str);
+        cJSON_Delete(root);
+
+        return ESP_OK;
+
+    } else if (req->method == HTTP_POST) {
+        char buf[256];
+        int ret = httpd_req_recv(req, buf, sizeof(buf) - 1);
+        if (ret <= 0) {
+            httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "No data received");
+            return ESP_FAIL;
+        }
+
+        buf[ret] = '\0';
+        cJSON *root = cJSON_Parse(buf);
+        if (!root) {
+            httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Invalid JSON");
+            return ESP_FAIL;
+        }
+
+        cJSON *token_obj = cJSON_GetObjectItem(root, "token");
+        if (token_obj && cJSON_IsString(token_obj)) {
+            esp_err_t err = telegram_bot_set_token(token_obj->valuestring);
+            if (err != ESP_OK) {
+                cJSON_Delete(root);
+                httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Invalid token");
+                return ESP_FAIL;
+            }
+        }
+
+        cJSON_Delete(root);
+
+        cJSON *response = cJSON_CreateObject();
+        cJSON_AddStringToObject(response, "status", "success");
+        char *json_str = cJSON_Print(response);
+        httpd_resp_set_type(req, "application/json");
+        httpd_resp_sendstr(req, json_str);
+        free(json_str);
+        cJSON_Delete(response);
+
+        return ESP_OK;
+    }
+
+    return ESP_FAIL;
+}
+
+// POST /api/telegram/chat_id - Set Telegram chat ID
+static esp_err_t api_post_telegram_chat_id(httpd_req_t *req)
+{
+    char buf[128];
+    int ret = httpd_req_recv(req, buf, sizeof(buf) - 1);
+    if (ret <= 0) {
+        httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "No data");
+        return ESP_FAIL;
+    }
+    buf[ret] = '\0';
+
+    cJSON *json = cJSON_Parse(buf);
+    if (!json) {
+        httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Invalid JSON");
+        return ESP_FAIL;
+    }
+
+    cJSON *chat_id_obj = cJSON_GetObjectItem(json, "chat_id");
+    if (!chat_id_obj) {
+        cJSON_Delete(json);
+        httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Missing chat_id");
+        return ESP_FAIL;
+    }
+
+    int64_t chat_id = 0;
+
+    // Handle both string and number
+    if (cJSON_IsString(chat_id_obj)) {
+        // Parse string to int64
+        sscanf(chat_id_obj->valuestring, "%" PRId64, &chat_id);
+    } else if (cJSON_IsNumber(chat_id_obj)) {
+        chat_id = (int64_t) chat_id_obj->valuedouble;
+    }
+
+    cJSON_Delete(json);
+
+    if (chat_id == 0) {
+        httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Invalid chat_id");
+        return ESP_FAIL;
+    }
+
+    esp_err_t err = telegram_bot_set_chat_id(chat_id);
+    if (err != ESP_OK) {
+        httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Failed to set chat_id");
+        return ESP_FAIL;
+    }
+
+    cJSON *response = cJSON_CreateObject();
+    cJSON_AddBoolToObject(response, "success", true);
+    cJSON_AddNumberToObject(response, "chat_id", (double) chat_id);
+
+    char *response_str = cJSON_PrintUnformatted(response);
+    cJSON_Delete(response);
+
+    httpd_resp_set_type(req, "application/json");
+    httpd_resp_sendstr(req, response_str);
+    free(response_str);
+
+    return ESP_OK;
+}
+
+// GET /api/telegram/chat_id - Get Telegram chat ID
+static esp_err_t api_get_telegram_chat_id(httpd_req_t *req)
+{
+    int64_t chat_id = 0;
+    esp_err_t err = telegram_bot_get_chat_id(&chat_id);
+
+    cJSON *response = cJSON_CreateObject();
+
+    if (err == ESP_OK) {
+        cJSON_AddNumberToObject(response, "chat_id", (double) chat_id);
+        cJSON_AddBoolToObject(response, "configured", true);
+    } else {
+        cJSON_AddNumberToObject(response, "chat_id", 0);
+        cJSON_AddBoolToObject(response, "configured", false);
+    }
+
+    char *response_str = cJSON_PrintUnformatted(response);
+    cJSON_Delete(response);
+
+    httpd_resp_set_type(req, "application/json");
+    httpd_resp_sendstr(req, response_str);
+    free(response_str);
+
+    return ESP_OK;
+}
+
+static esp_err_t portrait_combine_handler(httpd_req_t *req)
+{
+    if (req->method == HTTP_GET) {
+        // Get current state
+        cJSON *response = cJSON_CreateObject();
+        cJSON_AddBoolToObject(response, "enabled", image_processor_get_portrait_combine_enabled());
+
+        char *json_str = cJSON_PrintUnformatted(response);
+        cJSON_Delete(response);
+
+        httpd_resp_set_type(req, "application/json");
+        httpd_resp_sendstr(req, json_str);
+        free(json_str);
+
+        return ESP_OK;
+
+    } else if (req->method == HTTP_POST) {
+        // Set state
+        char buf[128];
+        int ret = httpd_req_recv(req, buf, sizeof(buf) - 1);
+        if (ret <= 0) {
+            httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Failed to read body");
+            return ESP_FAIL;
+        }
+        buf[ret] = '\0';
+
+        cJSON *json = cJSON_Parse(buf);
+        if (!json) {
+            httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Invalid JSON");
+            return ESP_FAIL;
+        }
+
+        cJSON *enabled_obj = cJSON_GetObjectItem(json, "enabled");
+        if (enabled_obj && cJSON_IsBool(enabled_obj)) {
+            image_processor_set_portrait_combine_enabled(cJSON_IsTrue(enabled_obj));
+        }
+
+        cJSON_Delete(json);
+
+        cJSON *response = cJSON_CreateObject();
+        cJSON_AddBoolToObject(response, "success", true);
+        cJSON_AddBoolToObject(response, "enabled", image_processor_get_portrait_combine_enabled());
+
+        char *json_str = cJSON_PrintUnformatted(response);
+        cJSON_Delete(response);
+
+        httpd_resp_set_type(req, "application/json");
+        httpd_resp_sendstr(req, json_str);
+        free(json_str);
+
+        return ESP_OK;
+    }
+
+    httpd_resp_send_err(req, HTTPD_405_METHOD_NOT_ALLOWED, "Only GET/POST");
+    return ESP_FAIL;
+}
+
+// v1.9.0_tlg Telegram END
 static esp_err_t index_handler(httpd_req_t *req)
 {
     const size_t index_html_size = (index_html_end - index_html_start);
@@ -489,23 +728,62 @@ static esp_err_t serve_image_handler(httpd_req_t *req)
 
     FILE *fp = fopen(filepath, "rb");
 
-    // If JPG doesn't exist and request was for .jpg, try .bmp fallback
+    /*
+        // If JPG doesn't exist and request was for .jpg, try .bmp fallback
+        if (!fp) {
+            char *ext = strrchr(decoded_filename, '.');
+            if (ext && strcasecmp(ext, ".jpg") == 0) {
+                // Convert .jpg to .bmp for fallback
+                char bmp_filename[256];
+                strncpy(bmp_filename, decoded_filename, sizeof(bmp_filename) - 1);
+                char *bmp_ext = strrchr(bmp_filename, '.');
+                if (bmp_ext) {
+                    strcpy(bmp_ext, ".bmp");
+                }
+
+                snprintf(filepath, sizeof(filepath), "%s/%s", IMAGE_DIRECTORY, bmp_filename);
+                fp = fopen(filepath, "rb");
+                if (fp) {
+                    content_type = "image/bmp";
+                    ESP_LOGW(TAG, "JPG thumbnail not found, serving BMP: %s", bmp_filename);
+                }
+            }
+        }
+    */
+    // If JPG doesn't exist and request was for .jpg, try alternatives
     if (!fp) {
         char *ext = strrchr(decoded_filename, '.');
         if (ext && strcasecmp(ext, ".jpg") == 0) {
-            // Convert .jpg to .bmp for fallback
-            char bmp_filename[256];
-            strncpy(bmp_filename, decoded_filename, sizeof(bmp_filename) - 1);
-            char *bmp_ext = strrchr(bmp_filename, '.');
-            if (bmp_ext) {
-                strcpy(bmp_ext, ".bmp");
+            // First, try _thumb.jpg for combined images
+            // e.g., Default/combined_72.jpg -> Default/combined_72_thumb.jpg
+            char thumb_filename[256];
+            strncpy(thumb_filename, decoded_filename, sizeof(thumb_filename) - 1);
+            char *thumb_ext = strrchr(thumb_filename, '.');
+            if (thumb_ext) {
+                strcpy(thumb_ext, "_thumb.jpg");
             }
 
-            snprintf(filepath, sizeof(filepath), "%s/%s", IMAGE_DIRECTORY, bmp_filename);
+            snprintf(filepath, sizeof(filepath), "%s/%s", IMAGE_DIRECTORY, thumb_filename);
             fp = fopen(filepath, "rb");
+
             if (fp) {
-                content_type = "image/bmp";
-                ESP_LOGW(TAG, "JPG thumbnail not found, serving BMP: %s", bmp_filename);
+                content_type = "image/jpeg";
+                ESP_LOGI(TAG, "Serving thumbnail: %s", thumb_filename);
+            } else {
+                // Thumbnail not found, try .bmp fallback
+                char bmp_filename[256];
+                strncpy(bmp_filename, decoded_filename, sizeof(bmp_filename) - 1);
+                char *bmp_ext = strrchr(bmp_filename, '.');
+                if (bmp_ext) {
+                    strcpy(bmp_ext, ".bmp");
+                }
+
+                snprintf(filepath, sizeof(filepath), "%s/%s", IMAGE_DIRECTORY, bmp_filename);
+                fp = fopen(filepath, "rb");
+                if (fp) {
+                    content_type = "image/bmp";
+                    ESP_LOGW(TAG, "JPG thumbnail not found, serving BMP: %s", bmp_filename);
+                }
             }
         }
     }
@@ -919,35 +1197,6 @@ static esp_err_t sleep_handler(httpd_req_t *req)
     return ESP_OK;
 }
 
-static esp_err_t rotate_handler(httpd_req_t *req)
-{
-    if (!system_ready) {
-        httpd_resp_set_status(req, HTTPD_503);
-        httpd_resp_sendstr(req, "System is still initializing");
-        return ESP_FAIL;
-    }
-
-    power_manager_reset_sleep_timer();
-
-    ESP_LOGI(TAG, "Manual rotation triggered via API");
-
-    // Trigger rotation just like KEY button press
-    display_manager_handle_wakeup();
-
-    cJSON *response = cJSON_CreateObject();
-    cJSON_AddStringToObject(response, "status", "success");
-    cJSON_AddStringToObject(response, "message", "Image rotation triggered");
-
-    char *json_str = cJSON_Print(response);
-    httpd_resp_set_type(req, "application/json");
-    httpd_resp_sendstr(req, json_str);
-
-    free(json_str);
-    cJSON_Delete(response);
-
-    return ESP_OK;
-}
-
 static esp_err_t config_handler(httpd_req_t *req)
 {
     if (!system_ready) {
@@ -959,11 +1208,10 @@ static esp_err_t config_handler(httpd_req_t *req)
     power_manager_reset_sleep_timer();
 
     if (req->method == HTTP_GET) {
-        int rotate_interval = config_manager_get_rotate_interval();
-        bool auto_rotate = config_manager_get_auto_rotate();
+        int rotate_interval = display_manager_get_rotate_interval();
+        bool auto_rotate = display_manager_get_auto_rotate();
         bool deep_sleep_enabled = power_manager_get_deep_sleep_enabled();
         const char *image_url = config_manager_get_image_url();
-        const char *ha_url = config_manager_get_ha_url();
         rotation_mode_t rotation_mode = config_manager_get_rotation_mode();
         bool save_downloaded_images = config_manager_get_save_downloaded_images();
 
@@ -972,7 +1220,6 @@ static esp_err_t config_handler(httpd_req_t *req)
         cJSON_AddBoolToObject(root, "auto_rotate", auto_rotate);
         cJSON_AddBoolToObject(root, "deep_sleep_enabled", deep_sleep_enabled);
         cJSON_AddStringToObject(root, "image_url", image_url ? image_url : "");
-        cJSON_AddStringToObject(root, "ha_url", ha_url ? ha_url : "");
         cJSON_AddStringToObject(root, "rotation_mode",
                                 rotation_mode == ROTATION_MODE_URL ? "url" : "sdcard");
         cJSON_AddBoolToObject(root, "save_downloaded_images", save_downloaded_images);
@@ -1002,13 +1249,13 @@ static esp_err_t config_handler(httpd_req_t *req)
 
         cJSON *interval_obj = cJSON_GetObjectItem(root, "rotate_interval");
         if (interval_obj && cJSON_IsNumber(interval_obj)) {
-            config_manager_set_rotate_interval(interval_obj->valueint);
+            display_manager_set_rotate_interval(interval_obj->valueint);
             power_manager_reset_rotate_timer();
         }
 
         cJSON *auto_rotate_obj = cJSON_GetObjectItem(root, "auto_rotate");
         if (auto_rotate_obj && cJSON_IsBool(auto_rotate_obj)) {
-            config_manager_set_auto_rotate(cJSON_IsTrue(auto_rotate_obj));
+            display_manager_set_auto_rotate(cJSON_IsTrue(auto_rotate_obj));
         }
 
         cJSON *deep_sleep_obj = cJSON_GetObjectItem(root, "deep_sleep_enabled");
@@ -1020,12 +1267,6 @@ static esp_err_t config_handler(httpd_req_t *req)
         if (image_url_obj && cJSON_IsString(image_url_obj)) {
             const char *url = cJSON_GetStringValue(image_url_obj);
             config_manager_set_image_url(url);
-        }
-
-        cJSON *ha_url_obj = cJSON_GetObjectItem(root, "ha_url");
-        if (ha_url_obj && cJSON_IsString(ha_url_obj)) {
-            const char *url = cJSON_GetStringValue(ha_url_obj);
-            config_manager_set_ha_url(url);
         }
 
         cJSON *rotation_mode_obj = cJSON_GetObjectItem(root, "rotation_mode");
@@ -1706,10 +1947,21 @@ esp_err_t http_server_init(void)
 {
     httpd_config_t config = HTTPD_DEFAULT_CONFIG();
     config.max_uri_handlers =
-        30;                     // Increased to accommodate all endpoints including reset defaults
-    config.stack_size = 12288;  // Increased from 8192 to 12KB
+        40;  // was 30, Increased to accommodate all endpoints including reset defaults
+    config.stack_size = 16384;       // Increased from 12288 to 16KB
     config.max_open_sockets = 10;    // Limit concurrent connections to prevent memory exhaustion
     config.lru_purge_enable = true;  // Enable LRU purging of connections
+
+    // DEBUGGING
+    /*
+        // *** Timeouts  ***
+        config.recv_wait_timeout = 30;    // 30, was 5
+        config.send_wait_timeout = 30;    // 30, was 5
+        config.keep_alive_enable = true;  // enable Keep-Alive
+        config.keep_alive_idle = 120;     // 120 s idle
+        config.keep_alive_interval = 10;  // 10 s Probe-Interval
+        config.keep_alive_count = 5;      // 5 Probes
+    */
 
     if (httpd_start(&server, &config) == ESP_OK) {
         httpd_uri_t index_uri = {
@@ -1771,10 +2023,6 @@ esp_err_t http_server_init(void)
                                        .handler = serve_image_handler,
                                        .user_ctx = NULL};
         httpd_register_uri_handler(server, &serve_image_uri);
-
-        httpd_uri_t rotate_uri = {
-            .uri = "/api/rotate", .method = HTTP_POST, .handler = rotate_handler, .user_ctx = NULL};
-        httpd_register_uri_handler(server, &rotate_uri);
 
         httpd_uri_t config_get_uri = {
             .uri = "/api/config", .method = HTTP_GET, .handler = config_handler, .user_ctx = NULL};
@@ -1867,6 +2115,81 @@ esp_err_t http_server_init(void)
                                                .handler = display_calibration_handler,
                                                .user_ctx = NULL};
         httpd_register_uri_handler(server, &display_calibration_uri);
+
+        // v1.9.0_tlg Telegram START, register den new Handlers:
+        /*
+        httpd_uri_t telegram_config_uri = {
+                .uri = "/api/telegram/config",
+                .method = HTTP_POST | HTTP_GET,
+                .handler = telegram_config_handler,
+                .user_ctx = NULL
+        };
+        httpd_register_uri_handler(server, &telegram_config_uri);
+        */
+        // GET-Handler (Config abrufen)
+        // curl http://photoframe.local/api/telegram/config
+        httpd_uri_t telegram_config_get_uri = {.uri = "/api/telegram/config",
+                                               .method = HTTP_GET,
+                                               .handler = telegram_config_handler,
+                                               .user_ctx = NULL};
+        httpd_register_uri_handler(server, &telegram_config_get_uri);
+
+        // POST-Handler (Config setzen)
+        httpd_uri_t telegram_config_post_uri = {.uri = "/api/telegram/config",
+                                                .method = HTTP_POST,
+                                                .handler = telegram_config_handler,
+                                                .user_ctx = NULL};
+        httpd_register_uri_handler(server, &telegram_config_post_uri);
+
+        // Chat ID
+        httpd_uri_t api_telegram_chat_id_get = {.uri = "/api/telegram/chat_id",
+                                                .method = HTTP_GET,
+                                                .handler = api_get_telegram_chat_id,
+                                                .user_ctx = NULL};
+        httpd_register_uri_handler(server, &api_telegram_chat_id_get);
+
+        httpd_uri_t api_telegram_chat_id_post = {.uri = "/api/telegram/chat_id",
+                                                 .method = HTTP_POST,
+                                                 .handler = api_post_telegram_chat_id,
+                                                 .user_ctx = NULL};
+        httpd_register_uri_handler(server, &api_telegram_chat_id_post);
+
+        // Portrait Combine Mode
+        /*
+        Feature				Combine OFF
+        Combine ON Landscape JPG		Normal ? BMP (no rotation)
+        Normal ? BMP (no rotation) Portrait JPG		Normal ? BMP (rotation)
+        ? save to portrait/ (no rotation) Portrait pairing	-
+        Wait for 2. Portrait ? Combine
+        */
+        httpd_uri_t portrait_combine_get = {.uri = "/api/portrait-combine",
+                                            .method = HTTP_GET,
+                                            .handler = portrait_combine_handler,
+                                            .user_ctx = NULL};
+        httpd_register_uri_handler(server, &portrait_combine_get);
+
+        httpd_uri_t portrait_combine_post = {.uri = "/api/portrait-combine",
+                                             .method = HTTP_POST,
+                                             .handler = portrait_combine_handler,
+                                             .user_ctx = NULL};
+        httpd_register_uri_handler(server, &portrait_combine_post);
+
+        // v1.9.0_tlg Telegram END
+        /*
+        // Test endpoint for timer wakeup simulation
+        httpd_uri_t test_timer_wakeup_uri = {
+                .uri = "/api/test/timer_wakeup",
+                .method = HTTP_GET,
+                .handler = test_timer_wakeup_handler,
+                .user_ctx = NULL
+        };
+        esp_err_t test_err = httpd_register_uri_handler(server, &test_timer_wakeup_uri);
+        if (test_err == ESP_OK) {
+                ESP_LOGI(TAG, "Test endpoint registered: /api/test/timer_wakeup");
+        } else {
+                ESP_LOGE(TAG, "Failed to register test endpoint: %s", esp_err_to_name(test_err));
+        }
+        */
 
         ESP_LOGI(TAG, "HTTP server started");
         return ESP_OK;

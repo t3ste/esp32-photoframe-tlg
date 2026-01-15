@@ -1,0 +1,171 @@
+@startuml Telegram_Notification_Flow
+!theme plain
+skinparam backgroundColor #FFFFFF
+
+title Telegram Notification Decision Tree
+
+start
+
+:Event Trigger;
+
+partition "Notification Type Detection" {
+  if (Event Type?) then (TIMER_WAKEUP)
+    #LightBlue:Auto-Rotation Wakeup;
+    -> Check Settings;
+
+  elseif (BOOT_WAKEUP) then (yes)
+    #LightGreen:Boot Button Wakeup;
+    -> Check Settings;
+
+  elseif (DISPLAY_UPDATE) then (yes)
+    #Yellow:Display Updated;
+    -> Check Settings;
+
+  elseif (BEFORE_SLEEP) then (yes)
+    #Pink:Entering Sleep;
+    -> Check Settings;
+
+  else (OTHER)
+    :No notification;
+    stop
+  endif
+}
+
+partition "Settings Check" {
+  if (Event = TIMER_WAKEUP?) then (YES)
+    if (notify_on_timer_wakeup = TRUE?) then (YES)
+      #Cyan:Prepare wake-up notification;
+
+      :Get battery status;
+      :battery_percent = axp_get_battery_percent();
+      :is_charging = axp_is_charging();
+      :usb_connected = axp_is_usb_connected();
+
+      if (Battery ≤ 20% AND\nNOT charging AND\nNOT usb_connected?) then (YES)
+        #Red:**LOW BATTERY WARNING**;
+        :message = "⚠️ Low Battery Alert\n";
+        :message += "Battery: {percent}%\n";
+        :message += "Status: Not charging\n";
+        :message += "Please connect charger soon.";
+      else (Normal battery)
+        :message = "Wake Up\n";
+        :message += "Battery Status\n";
+        :message += "Level: {percent}% ({voltage}mV)\n";
+        :message += "Charging: {yes/no}\n";
+        :message += "USB: {connected/disconnected}";
+      endif
+
+      -> Send Notification;
+
+    else (FALSE)
+      :Skip notification;
+      stop
+    endif
+
+  elseif (Event = DISPLAY_UPDATE?) then (YES)
+    if (notify_on_display_update = TRUE?) then (YES)
+      #Yellow:Prepare display notification;
+
+      :Get current image path;
+      :current_image = display_manager_get_current_image();
+
+      :Find thumbnail;
+      :thumbnail = replace(.bmp, .jpg);
+
+      if (Thumbnail exists?) then (YES)
+        :message = "Display Updated\n";
+        :message += "Image: {filename}";
+        :Prepare photo upload;
+        -> Send Notification with Photo;
+      else (NO - use BMP)
+        :Convert BMP to thumbnail;
+        :Or send text only;
+        -> Send Notification;
+      endif
+
+    else (FALSE)
+      :Skip notification;
+      stop
+    endif
+
+  elseif (Event = BEFORE_SLEEP?) then (YES)
+    if (notify_on_sleep = TRUE?) then (YES)
+      #Pink:Prepare sleep notification;
+
+      :Get configuration;
+      :rotate_interval = display_manager_get_rotate_interval();
+      :auto_rotate = display_manager_get_auto_rotate();
+      :deep_sleep = power_manager_get_deep_sleep_enabled();
+
+      :Get battery status;
+
+      :message = "Going to Sleep\n";
+      :message += "Configuration\n";
+      :message += "Auto-Rotate: {on/off}\n";
+      :message += "Interval: {seconds}s\n";
+      :message += "Deep Sleep: {enabled/disabled}\n\n";
+      :message += "Battery\n";
+      :message += "{battery_info}\n";
+      :message += "Entering sleep mode now...";
+
+      -> Send Notification;
+
+    else (FALSE)
+      :Skip notification;
+      stop
+    endif
+
+  else (BOOT_WAKEUP or OTHER)
+    :Default notification;
+    -> Send Notification;
+  endif
+}
+
+partition "Send Notification" {
+  if (WiFi connected?) then (YES)
+    if (Has Telegram token AND chat_id?) then (YES)
+
+      if (Notification with photo?) then (YES)
+        #Orange:Async Photo Upload;
+        :photo_send_in_progress = TRUE;
+        :Create photosend_task();
+        :- Stack: 40 KB (SPIRAM)\n- Priority: 5;
+
+        :telegram_bot_send_photo_async(\n  chat_id,\n  photo_path,\n  caption);
+
+        :Wait for upload (max 10s);
+
+        repeat
+          :vTaskDelay(100ms);
+        repeat while (photo_send_in_progress AND\ntimeout < 10s?) is (YES)
+
+        if (Upload completed?) then (YES)
+          #LightGreen:Photo sent successfully;
+        else (TIMEOUT)
+          #Red:Photo upload timeout;
+        endif
+
+      else (Text only)
+        :telegram_bot_send_message(\n  chat_id,\n  message);
+
+        if (Send successful?) then (YES)
+          #LightGreen:Message sent;
+        else (FAILED)
+          #Red:Send failed;
+        endif
+      endif
+
+    else (NO credentials)
+      :Telegram not configured;
+      #Gray:Skip notification;
+    endif
+
+  else (NO WiFi)
+    :WiFi not available;
+    #Gray:Skip notification;
+  endif
+}
+
+stop
+
+@enduml

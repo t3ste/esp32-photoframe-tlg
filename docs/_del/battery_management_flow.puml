@@ -1,0 +1,119 @@
+@startuml Battery_Management_Flow
+!theme plain
+skinparam backgroundColor #FFFFFF
+
+title Battery Low Mode Management
+
+start
+
+:check_battery_low_mode();
+note right
+  Called every second by:
+  - rotation_timer_task()
+  - power_manager_init()
+end note
+
+:Read battery status;
+:battery_percent = axp_get_battery_percent();
+:is_charging = axp_is_charging();
+:usb_connected = axp_is_usb_connected();
+
+if (Battery connected?) then (battery_percent >= 0)
+
+  if (battery_low_mode_active = FALSE?) then (YES - Normal mode)
+
+    if (battery_percent ≤ 20% AND\nNOT charging AND\nNOT usb_connected?) then (YES)
+      #Red:**ACTIVATE LOW BATTERY MODE**;
+
+      :Get current interval;
+      :current_interval = display_manager_get_rotate_interval();
+
+      if (current_interval < 21600s?) then (YES)
+        :Save current interval to NVS;
+        :nvs_set_i32("bat_saved_interval", current_interval);
+        :nvs_set_u8("bat_low_mode", 1);
+
+        :Change rotation interval;
+        :display_manager_set_rotate_interval(21600);
+        :// 6 hours;
+
+        :battery_low_mode_active = TRUE;
+
+        :Log: "Battery Low Mode ACTIVATED"\n"Interval changed: {old} → 21600s";
+
+      else (Interval already ≥ 21600s)
+        :Skip activation;
+        :Log: "Battery low, but interval already long";
+      endif
+
+    else (Battery OK or charging)
+      :Normal operation;
+    endif
+
+  else (NO - battery_low_mode_active = TRUE)
+
+    if (battery_percent ≥ 80% OR\ncharging OR\nusb_connected?) then (YES)
+      #Green:**DEACTIVATE LOW BATTERY MODE**;
+
+      :Load saved interval from NVS;
+      :nvs_get_i32("bat_saved_interval", &saved_interval);
+
+      if (saved_interval > 0?) then (YES)
+        :Restore original interval;
+        :display_manager_set_rotate_interval(saved_interval);
+        :Log: "Interval restored: {saved_interval}s";
+      else (No saved interval)
+        :Keep current interval;
+        :Log: "No saved interval found";
+      endif
+
+      :Clear low mode flags in NVS;
+      :nvs_erase_key("bat_low_mode");
+      :nvs_erase_key("bat_saved_interval");
+      :nvs_commit();
+
+      :battery_low_mode_active = FALSE;
+      :saved_rotate_interval = 0;
+
+      :Log: "Battery Low Mode DEACTIVATED";
+
+    else (Still low battery)
+      :Keep low battery mode active;
+    endif
+  endif
+
+else (NO battery - battery_percent = -1)
+
+  if (battery_low_mode_active = TRUE?) then (YES)
+    :Battery disconnected during low mode;
+    :Deactivate low battery mode;
+    -> Deactivate;
+  else (NO)
+    :No battery - ignore low mode;
+  endif
+endif
+
+stop
+
+note bottom
+  **Battery Low Mode Summary**
+
+  Activation Conditions:
+  - Battery ≤ 20%
+  - NOT charging
+  - NOT USB connected
+  - Current interval < 21600s
+
+  Deactivation Conditions:
+  - Battery ≥ 80% OR
+  - Charging OR
+  - USB connected OR
+  - No battery connected
+
+  Effect:
+  - Saves current rotation interval
+  - Sets interval to 21600s (6 hours)
+  - Reduces wakeups to save battery
+end note
+
+@enduml

@@ -1,0 +1,68 @@
+@startuml ESP32_PhotoFrame_Button_Wakeup
+title ESP32-S3 Photo Frame - Button Wakeup Flows
+
+start
+
+:Button Press Detected;
+
+if (Which Button?) then (KEY_BUTTON)
+  :KEY Button Wakeup;
+  note right
+    Wakeup Cause: ESP_SLEEP_WAKEUP_EXT1
+    GPIO: KEY_BUTTON
+  end note
+
+  :Simple Image Rotation;
+  note right
+    No WiFi initialization
+    No Telegram checks
+  end note
+
+  :Display Next Image;
+  :Enter Deep Sleep;
+  stop
+
+elseif (BOOT_BUTTON) then
+  :BOOT Button Wakeup;
+  note right
+    Wakeup Cause: ESP_SLEEP_WAKEUP_EXT1
+    GPIO: BOOT_BUTTON
+  end note
+
+  :Initialize WiFi;
+  #lightblue:[[#wifi_init WiFi Initialization Flow]];
+
+  if (Telegram Configured?) then (Yes)
+    :Send BOOT Wakeup Notification;
+    :Start Telegram Polling Task;
+  endif
+
+  :Start HTTP Server;
+  note right
+    Web interface available
+    System stays awake
+  end note
+
+  :Start Button Monitor Task;
+  note right
+    Monitor for:
+    - BOOT (2s hold) = WiFi Reset
+    - BOOT (10s hold) = WiFi Credentials Reset
+    - KEY = Manual Rotation
+  end note
+
+  :System Running;
+  note right
+    Auto-sleep after timeout
+    Active rotation if USB connected
+  end note
+
+else (POWER_ON)
+  :Power-On Boot;
+  :Normal Operation Mode;
+  #yellow:[[#normal_operation Full Initialization]];
+endif
+
+stop
+
+@enduml

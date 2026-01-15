@@ -1,0 +1,138 @@
+@startuml Image_History_Management
+!theme plain
+skinparam backgroundColor #FFFFFF
+
+title Image History Management (Prevent Duplicates)
+
+start
+
+:Display new image request;
+:display_manager_handle_wakeup();
+
+:Get enabled albums;
+:album_manager_get_enabled_albums(&albums, &count);
+
+:Count total images in albums;
+:total_count = count_bmp_files(albums);
+
+if (total_count = 0?) then (YES)
+  :No images available;
+  #Red:ERROR;
+  stop
+endif
+
+:Build complete image list;
+:image_list[total_count];
+
+partition "Filter Already Displayed" {
+  :Create undisplayed list;
+  :undisplayed_list = malloc(total_count);
+
+  :undisplayed_count = 0;
+
+  repeat
+    :Get next image from list;
+    :image_path = image_list[i];
+
+    :Calculate MD5 hash;
+    :calculate_image_hash(path, hash);
+
+    if (is_image_displayed(path)?) then (NO - New image)
+      :Add to undisplayed list;
+      :undisplayed_list[undisplayed_count++] = path;
+    else (YES - Already shown)
+      :Skip this image;
+    endif
+
+  repeat while (More images?) is (YES)
+
+  :Log: "Images: {total} total, {undisplayed} not yet displayed, {displayed_count} in history";
+}
+
+if (undisplayed_count = 0?) then (YES - All shown)
+  #Yellow:**ALL IMAGES DISPLAYED**;
+
+  if (WiFi connected AND Telegram configured?) then (YES)
+    :Send Telegram notification;
+    :message = "🔄 Image History Reset\n";
+    :message += "All {total_count} images displayed.\n";
+    :message += "Starting new cycle...";
+    :telegram_bot_send_message(chat_id, message);
+    :Wait 1s;
+  endif
+
+  :Clear image history;
+  :clear_image_history();
+  :displayed_count = 0;
+  :free(displayed_image_hashes);
+
+  :Erase NVS keys;
+  :nvs_erase_key("img_hist_cnt");
+  :nvs_erase_key("img_history");
+
+  :Use all images again;
+  :undisplayed_list = image_list;
+  :undisplayed_count = total_count;
+
+else (NO - Unseen images available)
+  :Use filtered list;
+endif
+
+:Select random image;
+:random_index = esp_random() % undisplayed_count;
+:selected_image = undisplayed_list[random_index];
+
+:Log: "Displaying: {selected_image}";
+
+:Display image;
+:display_manager_show_image(selected_image);
+
+partition "Add to History" {
+  :Calculate MD5 hash;
+  :calculate_image_hash(selected_image, hash);
+
+  if (displayed_image_hashes = NULL?) then (YES)
+    :Allocate history buffer;
+    :displayed_image_hashes = malloc(1000 * 16);
+    :// Max 1000 images, 16 bytes MD5 each;
+    :displayed_count = 0;
+  endif
+
+  if (displayed_count < 1000?) then (YES)
+    :Add hash to history;
+    :memcpy(displayed_image_hashes[displayed_count], hash, 16);
+    :displayed_count++;
+
+    if (displayed_count % 10 = 0 OR\ndisplayed_count ≤ 10?) then (YES)
+      :Save to NVS;
+      :nvs_set_i32("img_hist_cnt", displayed_count);
+      :nvs_set_blob("img_history", hashes, displayed_count * 16);
+      :nvs_commit();
+      :Log: "Saved history to NVS";
+    else (NO)
+      :Skip NVS write (reduce flash wear);
+    endif
+
+  else (History full - 1000 images)
+    :Clear and restart history;
+    -> Clear history;
+  endif
+}
+
+:Free temporary lists;
+:free(undisplayed_list);
+:free(image_list);
+
+stop
+
+note bottom
+  **Image History Features**
+  - Stores MD5 hashes of displayed images
+  - Prevents showing same image twice
+  - Persisted in NVS (survives reboots)
+  - Max 1000 images (16 KB NVS storage)
+  - Auto-resets when all images shown
+  - Saves every 10 images to reduce flash wear
+end note
+
+@enduml

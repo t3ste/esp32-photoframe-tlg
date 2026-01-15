@@ -173,7 +173,7 @@ function selectAlbum(albumName) {
 async function loadImagesForAlbum(albumName) {
   try {
     const response = await fetch(
-      `${API_BASE}/api/images?album=${encodeURIComponent(albumName)}`,
+      `${API_BASE}/api/images?album=${encodeURIComponent(albumName)}`
     );
     if (!response.ok) {
       console.log("Failed to load images for album");
@@ -194,7 +194,7 @@ async function toggleAlbumEnabled(albumName, enabled) {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ enabled }),
-      },
+      }
     );
     if (response.ok) {
       console.log(`Album ${albumName} ${enabled ? "enabled" : "disabled"}`);
@@ -238,7 +238,7 @@ async function deleteAlbum(albumName) {
       `${API_BASE}/api/albums?name=${encodeURIComponent(albumName)}`,
       {
         method: "DELETE",
-      },
+      }
     );
     if (response.ok) {
       console.log("Album deleted:", albumName);
@@ -298,7 +298,9 @@ function displayImages() {
     const thumbnailName = image.name.replace(/\.bmp$/i, ".jpg");
     // Use album/filename format
     const thumbnailPath = `${selectedAlbum}/${thumbnailName}`;
-    thumbnail.src = `${API_BASE}/api/image?name=${encodeURIComponent(thumbnailPath)}`;
+    thumbnail.src = `${API_BASE}/api/image?name=${encodeURIComponent(
+      thumbnailPath
+    )}`;
     thumbnail.alt = image.name;
     thumbnail.loading = "lazy";
 
@@ -376,7 +378,7 @@ async function selectImage(filename, element) {
 
   // Show confirmation dialog
   const confirmed = confirm(
-    `Display "${filename}" on the e-paper screen?\n\nThis will take approximately 40 seconds to update.`,
+    `Display "${filename}" on the e-paper screen?\n\nThis will take approximately 40 seconds to update.`
   );
   if (!confirmed) {
     return;
@@ -492,7 +494,7 @@ async function resizeImage(file, maxWidth, maxHeight, quality) {
             resolve(blob);
           },
           "image/jpeg",
-          quality,
+          quality
         );
       };
       img.onerror = reject;
@@ -651,7 +653,7 @@ async function loadImage(file) {
     } catch (error) {
       console.error("HEIC conversion failed:", error);
       throw new Error(
-        "Failed to convert HEIC image. Please try a different format.",
+        "Failed to convert HEIC image. Please try a different format."
       );
     }
   }
@@ -916,7 +918,7 @@ function updatePreview() {
   // Copy original image data
   const imageDataCopy = tempCtx.createImageData(
     originalImageData.width,
-    originalImageData.height,
+    originalImageData.height
   );
   imageDataCopy.data.set(originalImageData.data);
 
@@ -1094,13 +1096,13 @@ document.getElementById("resetParams").addEventListener("click", async () => {
       document.getElementById("midpointValue").textContent =
         defaults.midpoint.toFixed(1);
       document.querySelector(
-        `input[name="colorMethod"][value="${defaults.colorMethod}"]`,
+        `input[name="colorMethod"][value="${defaults.colorMethod}"]`
       ).checked = true;
       document.querySelector(
-        `input[name="toneMode"][value="${defaults.toneMode}"]`,
+        `input[name="toneMode"][value="${defaults.toneMode}"]`
       ).checked = true;
       document.querySelector(
-        `input[name="processingMode"][value="${defaults.processingMode}"]`,
+        `input[name="processingMode"][value="${defaults.processingMode}"]`
       ).checked = true;
 
       // Update UI visibility
@@ -1108,7 +1110,7 @@ document.getElementById("resetParams").addEventListener("click", async () => {
       const colorMethodControl = document.getElementById("colorMethodControl");
       const contrastControl = document.getElementById("contrastControl");
       const curveCanvasWrapper = document.querySelector(
-        ".curve-canvas-wrapper",
+        ".curve-canvas-wrapper"
       );
 
       if (defaults.processingMode === "stock") {
@@ -1182,7 +1184,7 @@ document
         // Copy original image data
         const imageDataCopy = tempCtx.createImageData(
           originalImageData.width,
-          originalImageData.height,
+          originalImageData.height
         );
         imageDataCopy.data.set(originalImageData.data);
 
@@ -1208,7 +1210,7 @@ document
             currentParams.strength,
             currentParams.shadowBoost,
             currentParams.highlightCompress,
-            currentParams.midpoint,
+            currentParams.midpoint
           );
         }
 
@@ -1232,7 +1234,7 @@ document
       formData.append(
         "thumbnail",
         thumbnailBlob,
-        "thumb_" + currentImageFile.name,
+        "thumb_" + currentImageFile.name
       );
 
       const response = await fetch(`${API_BASE}/api/upload`, {
@@ -1295,7 +1297,6 @@ async function loadConfig() {
       data.rotate_interval || 3600;
     document.getElementById("imageUrl").value =
       data.image_url || "https://picsum.photos/800/480";
-    document.getElementById("haUrl").value = data.ha_url || "";
     document.getElementById("deepSleepEnabled").checked =
       data.deep_sleep_enabled !== false;
     document.getElementById("saveDownloadedImages").checked =
@@ -1350,16 +1351,15 @@ document.getElementById("configForm").addEventListener("submit", async (e) => {
   const statusDiv = document.getElementById("configStatus");
   const autoRotate = document.getElementById("autoRotate").checked;
   const rotateInterval = parseInt(
-    document.getElementById("rotateInterval").value,
+    document.getElementById("rotateInterval").value
   );
   const rotationMode = document.querySelector(
-    'input[name="rotationMode"]:checked',
+    'input[name="rotationMode"]:checked'
   ).value;
   const imageUrl = document.getElementById("imageUrl").value;
-  const haUrl = document.getElementById("haUrl").value;
   const deepSleepEnabled = document.getElementById("deepSleepEnabled").checked;
   const saveDownloadedImages = document.getElementById(
-    "saveDownloadedImages",
+    "saveDownloadedImages"
   ).checked;
 
   try {
@@ -1373,7 +1373,6 @@ document.getElementById("configForm").addEventListener("submit", async (e) => {
         rotate_interval: rotateInterval,
         rotation_mode: rotationMode,
         image_url: imageUrl,
-        ha_url: haUrl,
         deep_sleep_enabled: deepSleepEnabled,
         save_downloaded_images: saveDownloadedImages,
       }),
@@ -1437,7 +1436,7 @@ async function loadVersion() {
     // Update footer with version
     const footer = document.querySelector("footer p");
     if (footer && data.version) {
-      footer.textContent = `ESP32-S3 PhotoFrame ${data.version}`;
+      footer.textContent = `ESP32-S3 PhotoFrame v${data.version}`;
     }
   } catch (error) {
     // Silently fail if API not available (standalone mode)
@@ -1494,7 +1493,7 @@ function setupDragAndDrop() {
       () => {
         imageList.classList.add("drag-over");
       },
-      false,
+      false
     );
   });
 
@@ -1504,7 +1503,7 @@ function setupDragAndDrop() {
       () => {
         imageList.classList.remove("drag-over");
       },
-      false,
+      false
     );
   });
 
@@ -1591,13 +1590,13 @@ async function loadPersistedSettings() {
       document.getElementById("midpointValue").textContent =
         settings.midpoint.toFixed(1);
       document.querySelector(
-        `input[name="colorMethod"][value="${settings.colorMethod}"]`,
+        `input[name="colorMethod"][value="${settings.colorMethod}"]`
       ).checked = true;
       document.querySelector(
-        `input[name="toneMode"][value="${settings.toneMode}"]`,
+        `input[name="toneMode"][value="${settings.toneMode}"]`
       ).checked = true;
       document.querySelector(
-        `input[name="processingMode"][value="${settings.processingMode}"]`,
+        `input[name="processingMode"][value="${settings.processingMode}"]`
       ).checked = true;
 
       // Update UI visibility based on loaded settings
@@ -1605,7 +1604,7 @@ async function loadPersistedSettings() {
       const colorMethodControl = document.getElementById("colorMethodControl");
       const contrastControl = document.getElementById("contrastControl");
       const curveCanvasWrapper = document.querySelector(
-        ".curve-canvas-wrapper",
+        ".curve-canvas-wrapper"
       );
 
       if (settings.processingMode === "stock") {
@@ -1686,16 +1685,26 @@ function displayPalette(palette) {
     const div = document.createElement("div");
     div.className = "palette-color";
     div.innerHTML = `
-            <div class="palette-swatch" id="current-swatch-${color}" style="background-color: rgb(${rgb.r}, ${rgb.g}, ${rgb.b});"></div>
-            <div class="palette-label">${color.charAt(0).toUpperCase() + color.slice(1)}</div>
+            <div class="palette-swatch" id="current-swatch-${color}" style="background-color: rgb(${
+      rgb.r
+    }, ${rgb.g}, ${rgb.b});"></div>
+            <div class="palette-label">${
+              color.charAt(0).toUpperCase() + color.slice(1)
+            }</div>
             <div class="palette-rgb-inputs" style="display: flex; gap: 4px; margin-top: 5px;">
-                <input type="number" id="current-r-${color}" min="0" max="255" value="${rgb.r}" 
+                <input type="number" id="current-r-${color}" min="0" max="255" value="${
+      rgb.r
+    }" 
                        style="width: 50px; padding: 2px; text-align: center;" 
                        data-color="${color}" data-channel="r" class="current-rgb-input">
-                <input type="number" id="current-g-${color}" min="0" max="255" value="${rgb.g}" 
+                <input type="number" id="current-g-${color}" min="0" max="255" value="${
+      rgb.g
+    }" 
                        style="width: 50px; padding: 2px; text-align: center;" 
                        data-color="${color}" data-channel="g" class="current-rgb-input">
-                <input type="number" id="current-b-${color}" min="0" max="255" value="${rgb.b}" 
+                <input type="number" id="current-b-${color}" min="0" max="255" value="${
+      rgb.b
+    }" 
                        style="width: 50px; padding: 2px; text-align: center;" 
                        data-color="${color}" data-channel="b" class="current-rgb-input">
             </div>
@@ -1801,7 +1810,7 @@ document
       } else {
         const error = await response.json();
         throw new Error(
-          error.message || "Failed to display calibration pattern",
+          error.message || "Failed to display calibration pattern"
         );
       }
     } catch (error) {
@@ -1861,7 +1870,7 @@ document
         }, 1000);
       } else {
         throw new Error(
-          "Could not detect color boxes. Please ensure the photo shows the entire display clearly.",
+          "Could not detect color boxes. Please ensure the photo shows the entire display clearly."
         );
       }
     } catch (error) {
@@ -1892,14 +1901,18 @@ function validateExtractedColors(palette) {
   // Validate black - should be dark
   if (brightness(palette.black) > expectations.black.maxBrightness) {
     errors.push(
-      `Black is too bright (${Math.round(brightness(palette.black))}). Expected < ${expectations.black.maxBrightness}.`,
+      `Black is too bright (${Math.round(
+        brightness(palette.black)
+      )}). Expected < ${expectations.black.maxBrightness}.`
     );
   }
 
   // Validate white - should be bright
   if (brightness(palette.white) < expectations.white.minBrightness) {
     errors.push(
-      `White is too dark (${Math.round(brightness(palette.white))}). Expected > ${expectations.white.minBrightness}.`,
+      `White is too dark (${Math.round(
+        brightness(palette.white)
+      )}). Expected > ${expectations.white.minBrightness}.`
     );
   }
 
@@ -1909,7 +1922,7 @@ function validateExtractedColors(palette) {
     palette.yellow.g < expectations.yellow.minG
   ) {
     errors.push(
-      `Yellow doesn't have enough red/green. Check lighting and ensure no color cast.`,
+      `Yellow doesn't have enough red/green. Check lighting and ensure no color cast.`
     );
   }
   if (palette.yellow.b > expectations.yellow.maxB) {
@@ -1961,13 +1974,13 @@ function validateExtractedColors(palette) {
 
   if (avgBrightness < 50) {
     errors.push(
-      "Photo is too dark overall. Use better lighting (5500K daylight).",
+      "Photo is too dark overall. Use better lighting (5500K daylight)."
     );
   }
 
   if (avgBrightness > 200) {
     errors.push(
-      "Photo is overexposed. Reduce exposure or move away from direct light.",
+      "Photo is overexposed. Reduce exposure or move away from direct light."
     );
   }
 
@@ -2024,7 +2037,7 @@ function extractColorBoxes(ctx, width, height) {
       const maxDiff = Math.max(
         Math.abs(medR - medG),
         Math.abs(medG - medB),
-        Math.abs(medR - medB),
+        Math.abs(medR - medB)
       );
       return !(brightness > 200 && maxDiff < 30); // Not white/gray background
     })
@@ -2033,7 +2046,7 @@ function extractColorBoxes(ctx, width, height) {
 
   if (boxes.length < 6) {
     throw new Error(
-      "Could not detect all 6 color boxes. Please ensure the entire display is visible and well-lit.",
+      "Could not detect all 6 color boxes. Please ensure the entire display is visible and well-lit."
     );
   }
 
@@ -2156,16 +2169,26 @@ function displayMeasuredPalette(palette) {
     const div = document.createElement("div");
     div.className = "palette-color";
     div.innerHTML = `
-            <div class="palette-swatch" id="calibration-swatch-${color}" style="background-color: rgb(${rgb.r}, ${rgb.g}, ${rgb.b});"></div>
-            <div class="palette-label">${color.charAt(0).toUpperCase() + color.slice(1)}</div>
+            <div class="palette-swatch" id="calibration-swatch-${color}" style="background-color: rgb(${
+      rgb.r
+    }, ${rgb.g}, ${rgb.b});"></div>
+            <div class="palette-label">${
+              color.charAt(0).toUpperCase() + color.slice(1)
+            }</div>
             <div class="palette-rgb-inputs" style="display: flex; gap: 4px; margin-top: 5px;">
-                <input type="number" id="calibration-r-${color}" min="0" max="255" value="${rgb.r}" 
+                <input type="number" id="calibration-r-${color}" min="0" max="255" value="${
+      rgb.r
+    }" 
                        style="width: 50px; padding: 2px; text-align: center;" 
                        data-color="${color}" data-channel="r" class="calibration-rgb-input">
-                <input type="number" id="calibration-g-${color}" min="0" max="255" value="${rgb.g}" 
+                <input type="number" id="calibration-g-${color}" min="0" max="255" value="${
+      rgb.g
+    }" 
                        style="width: 50px; padding: 2px; text-align: center;" 
                        data-color="${color}" data-channel="g" class="calibration-rgb-input">
-                <input type="number" id="calibration-b-${color}" min="0" max="255" value="${rgb.b}" 
+                <input type="number" id="calibration-b-${color}" min="0" max="255" value="${
+      rgb.b
+    }" 
                        style="width: 50px; padding: 2px; text-align: center;" 
                        data-color="${color}" data-channel="b" class="calibration-rgb-input">
             </div>
@@ -2324,42 +2347,3 @@ document
 
 // Load palette on page load
 loadColorPalette();
-
-// Rotate image button handler
-document.getElementById("rotateBtn").addEventListener("click", async () => {
-  const statusDiv = document.getElementById("rotateStatus");
-  const btn = document.getElementById("rotateBtn");
-
-  btn.disabled = true;
-  statusDiv.textContent = "Rotating image...";
-  statusDiv.className = "";
-
-  try {
-    const response = await fetch(`${API_BASE}/api/rotate`, {
-      method: "POST",
-    });
-
-    if (response.ok) {
-      statusDiv.className = "status-success";
-      statusDiv.textContent = "✓ Image rotated successfully";
-
-      // Reload images after a short delay to show the new image
-      setTimeout(() => {
-        loadImages();
-      }, 1000);
-    } else {
-      throw new Error(`HTTP ${response.status}`);
-    }
-  } catch (error) {
-    statusDiv.className = "status-error";
-    statusDiv.textContent = "✗ Failed to rotate image: " + error.message;
-  } finally {
-    btn.disabled = false;
-
-    // Clear status message after 3 seconds
-    setTimeout(() => {
-      statusDiv.textContent = "";
-      statusDiv.className = "";
-    }, 3000);
-  }
-});

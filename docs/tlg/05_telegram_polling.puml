@@ -1,0 +1,122 @@
+@startuml ESP32_PhotoFrame_Telegram_Polling
+title ESP32-S3 Photo Frame - Telegram Polling Flow
+
+start
+
+:Telegram Check Task Started;
+
+:Reset Flags;
+note right
+  displaywasupdatedbytelegram = false
+  pendingdisplayupdate = false
+end note
+
+if (notify_on_timer_wakeup?) then (Yes)
+  if (Battery < 20%
+AND Not Charging
+AND Battery Present?) then (Yes)
+    :Send Low Battery Warning;
+  endif
+endif
+
+:Initial Telegram Check;
+
+if (Updates Available?) then (Yes)
+  :Enter Polling Mode;
+  note right
+    60-second timeout
+    Poll interval: configurable
+  end note
+
+  :Update Count = 0;
+  :Start Time = Now;
+
+  while (Polling Active?) is (Yes)
+    :Wait Poll Interval;
+    :Check Telegram Updates;
+
+    if (New Updates?) then (Yes)
+      :Increment Update Count;
+      :Reset Last Update Time;
+      :Reset Sleep Timer;
+
+      :Process Update;
+
+      if (Update Type?) then (Photo)
+        :Download & Process Photo;
+        note right
+          - Detect dimensions
+          - Portrait combine if needed
+          - Save to SD card
+          - Generate thumbnail
+        end note
+
+        if (Caption Contains
+"show", "display", "now"?) then (Yes)
+          :Display Image Immediately;
+          :Set displaywasupdatedbytelegram = true;
+        else (No)
+          :Image Queued for Rotation;
+        endif
+
+      elseif (Document) then
+        :Process Document as Photo;
+        if (Caption Trigger?) then (Yes)
+          :Display Immediately;
+          :Set displaywasupdatedbytelegram = true;
+        endif
+
+      elseif (Command) then
+        :Process Telegram Command;
+        note right
+          Commands: help, status, config,
+          battery, albums, display, etc.
+        end note
+
+        if (Command = "display"?) then (Yes)
+          :Display Specified Image;
+          :Set displaywasupdatedbytelegram = true;
+        endif
+      endif
+
+    else (No Updates)
+      if (60s Since Last Update?) then (Yes)
+        :Polling Timeout;
+        :Exit Polling;
+      endif
+    endif
+
+  endwhile (No - Timeout/Stop)
+
+  :Calculate Polling Duration;
+
+  if (Chat ID Valid?) then (Yes)
+    :Send Polling Complete Notification;
+    note right
+      Duration, update count,
+      display status
+    end note
+    :Wait for Notification Send;
+  endif
+
+  if (pendingdisplayupdate
+AND NOT displaywasupdatedbytelegram?) then (Yes)
+    :Execute Postponed Display Update;
+  endif
+
+  :Wait for Telegram Photo Notification Complete;
+  note right
+    Wait up to 10 seconds for
+    thumbnail upload to complete
+  end note
+
+else (No Updates)
+  :No Polling Needed;
+endif
+
+:Stop Telegram Polling Task;
+
+:Task Complete;
+stop
+
+@enduml

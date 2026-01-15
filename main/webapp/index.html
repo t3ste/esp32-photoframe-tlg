@@ -1,400 +1,908 @@
 <!DOCTYPE html>
 <html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>PhotoFrame Control Panel</title>
-    <link rel="icon" type="image/svg+xml" href="favicon.svg">
-    <link rel="stylesheet" href="style.css">
-</head>
-<body>
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>PhotoFrame Control Panel v1.9x Telegram</title>
+    <link rel="icon" type="image/svg+xml" href="favicon.svg" />
+    <link rel="stylesheet" href="style.css" />
+  </head>
+  <body>
     <div class="container">
-        <header>
-            <h1 class="header-title">
-                <img src="favicon.svg" alt="PhotoFrame" width="48" height="48">
-                <span>PhotoFrame Control Panel</span>
-            </h1>
-            <div id="batteryStatus" class="battery-status"></div>
-        </header>
+      <header>
+        <h1 style="display: flex; align-items: center; gap: 12px">
+          <img src="favicon.svg" alt="PhotoFrame" width="48" height="48" />
+          <span>PhotoFrame Control Panel</span>
+        </h1>
+        <div id="batteryStatus" class="battery-status"></div>
+      </header>
 
-        <section class="card">
-            <h2>Albums & Gallery</h2>
-            
-            <!-- Album Selection -->
-            <div class="album-section">
-                <div class="album-header">
-                    <p class="album-hint">
-                        ✓ = Enabled for auto-rotation • Click album to view images
-                    </p>
-                    <button onclick="createAlbum()" class="btn-primary">+ New Album</button>
-                </div>
-                <div id="albumList" class="album-list">
-                    <p class="loading">Loading albums...</p>
-                </div>
-            </div>
-            
-            <!-- Image Gallery -->
-            <div class="gallery-divider">
-                <h3 class="gallery-title">
-                    <span id="currentAlbumName">Images</span>
-                </h3>
-                <div id="displayStatus" class="display-status hidden">
-                    <div class="spinner"></div>
-                    <p>Updating display... This may take up to 40 seconds</p>
-                </div>
-                <div id="imageList" class="image-grid">
-                    <p class="loading">Loading images...</p>
-                </div>
-            </div>
-        </section>
+      <section class="card">
+        <h2>Albums & Gallery</h2>
 
-        <!-- Hidden file input -->
-        <input type="file" id="fileInput" accept=".jpg,.jpeg,.png,.heic,.heif,.webp,.gif,.bmp" class="hidden">
-        
-        <section class="card hidden" id="imageProcessingSection">
-            <h2>Image Processing</h2>
-            
-            <!-- Preview and Controls Area -->
-            <div id="previewArea" class="hidden">
-            <div class="preview-container">
-                <div class="comparison-container comparison-custom">
-                    <h3 class="comparison-title">
-                        Drag the slider to compare
-                    </h3>
-                    <div class="comparison-wrapper" id="comparisonWrapper">
-                        <div class="canvas-container">
-                            <canvas id="originalCanvas"></canvas>
-                            <canvas id="previewCanvas"></canvas>
-                            <div class="slider-container" id="sliderContainer">
-                                <div class="slider-handle">⟷</div>
-                            </div>
-                        </div>
-                    </div>
-                    <div class="comparison-labels">
-                        <span>← Original</span>
-                        <span>Dithered Preview →</span>
-                    </div>
-                </div>
-                <div class="curve-canvas-wrapper curve-wrapper">
-                    <div>
-                        <canvas id="curveCanvas" width="300" height="300"></canvas>
-                        <div class="preview-label">S-Curve Tone Mapping</div>
-                    </div>
-                    
-                    <!-- S-Curve Controls (Advanced) - Under Curve Canvas -->
-                    <div id="scurveControls" class="scurve-panel">
-                        <div class="scurve-title">S-Curve Parameters</div>
-                        <div class="scurve-controls-grid">
-                            <div class="form-group">
-                                <label for="scurveStrength">Strength: <span id="strengthValue"></span></label>
-                                <input type="range" id="scurveStrength" min="0" max="1" step="0.1">
-                                <small>Overall tone mapping strength (0=linear, 1=strong)</small>
-                            </div>
-                            
-                            <div class="form-group">
-                                <label for="scurveShadow">Shadow Boost: <span id="shadowValue"></span></label>
-                                <input type="range" id="scurveShadow" min="0" max="1" step="0.1">
-                                <small>Brighten shadow areas (higher=brighter)</small>
-                            </div>
-                            
-                            <div class="form-group">
-                                <label for="scurveHighlight">Highlight Compress: <span id="highlightValue"></span></label>
-                                <input type="range" id="scurveHighlight" min="0.5" max="5" step="0.1">
-                                <small>Protect highlights from over-exposure (higher=more protection)</small>
-                            </div>
-                            
-                            <div class="form-group">
-                                <label for="scurveMidpoint">Midpoint: <span id="midpointValue"></span></label>
-                                <input type="range" id="scurveMidpoint" min="0.3" max="0.7" step="0.05">
-                                <small>Where to split shadows/highlights</small>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-            
-            <!-- Row 1: Processing Algorithm & Color Matching Method -->
-            <div class="controls-grid processing-controls">
-                <div class="form-group">
-                    <label>Processing Algorithm:</label>
-                    <div class="radio-group">
-                        <label class="radio-option">
-                            <input type="radio" name="processingMode" value="enhanced">
-                            Enhanced (Our Algorithm)
-                        </label>
-                        <label class="radio-option">
-                            <input type="radio" name="processingMode" value="stock">
-                            Stock (Waveshare Original)
-                        </label>
-                    </div>
-                </div>
-                <small class="helper-text">Stock mode uses simple dithering without tone mapping</small>
-                
-                <div class="form-group" id="colorMethodControl">
-                    <label>Color Matching Method:</label>
-                    <div class="radio-group">
-                        <label class="radio-option">
-                            <input type="radio" name="colorMethod" value="rgb">
-                            Simple RGB (default)
-                        </label>
-                        <label class="radio-option">
-                            <input type="radio" name="colorMethod" value="lab">
-                            LAB Color Space (better for grayscale)
-                        </label>
-                    </div>
-                </div>
-            </div>
-            
-            <div id="enhancedControls">
-                
-                <!-- Row 2: Exposure & Saturation -->
-                <div class="controls-grid processing-controls">
-                    <div class="form-group">
-                        <label for="exposure">Exposure: <span id="exposureValue"></span></label>
-                        <input type="range" id="exposure" min="0.5" max="2.0" step="0.1">
-                        <small>Overall brightness (1.0=normal, >1.0=brighter)</small>
-                    </div>
-                    
-                    <div class="form-group">
-                        <label for="saturation">Saturation: <span id="saturationValue"></span></label>
-                        <input type="range" id="saturation" min="0.5" max="2" step="0.1">
-                        <small>Color vibrancy (1.0=normal, >1.0=more vibrant)</small>
-                    </div>
-                </div>
-                
-                <!-- Row 3: Tone Mapping Selection and Contrast Control -->
-                <div class="controls-grid processing-controls">
-                    <div class="form-group">
-                        <label>Tone Mapping:</label>
-                        <div class="radio-group">
-                            <label class="radio-option">
-                                <input type="radio" name="toneMode" value="scurve">
-                                S-Curve (Advanced)
-                            </label>
-                            <label class="radio-option">
-                                <input type="radio" name="toneMode" value="contrast">
-                                Contrast (Simple)
-                            </label>
-                        </div>
-                    </div>
-                    
-                    <!-- Contrast Control (Simple) -->
-                    <div id="contrastControl" class="form-group hidden">
-                        <label for="contrast">Contrast: <span id="contrastValue"></span></label>
-                        <input type="range" id="contrast" min="0.5" max="2.0" step="0.1">
-                        <small>Tonal range (1.0=normal, >1.0=more contrast)</small>
-                    </div>
-                </div>
-            </div>
-            
-            <div class="button-group">
-                <button type="button" id="discardImage" class="btn btn-secondary">Discard</button>
-                <button type="button" id="resetParams" class="btn btn-secondary">Reset to Defaults</button>
-                <button type="button" id="uploadProcessed" class="btn btn-primary">Upload to Device</button>
-            </div>
-            
-            <div id="uploadProgress" class="upload-progress hidden">
-                <div class="upload-progress-title">⏳ Uploading...</div>
-                <div class="upload-progress-text">Please wait, do not close this page</div>
-            </div>
-            </div>
-            
-            <!-- Status Messages -->
-            <div id="uploadStatus" class="status-spacing-large"></div>
-        </section>
-
-        <section class="card">
-            <h2>Settings</h2>
-            <form id="configForm">
-                <!-- Auto-Rotate Section -->
-                <div class="settings-section">
-                    <div class="form-group">
-                        <label class="checkbox-label">
-                            <input type="checkbox" id="autoRotate">
-                            <span>Enable Auto-Rotate</span>
-                        </label>
-                    </div>
-                    
-                    <div class="form-group">
-                        <label for="rotateInterval">Rotation Interval (seconds):</label>
-                        <input type="number" id="rotateInterval" min="10" max="86400" value="3600">
-                    </div>
-                    
-                    <div class="form-group">
-                        <label>Rotation Mode:</label>
-                        <div class="rotation-mode-group">
-                            <label class="radio-label">
-                                <input type="radio" name="rotationMode" value="sdcard" id="rotationModeSDCard" checked>
-                                <span>SD Card - Rotate through images on SD card</span>
-                            </label>
-                            <label class="radio-label">
-                                <input type="radio" name="rotationMode" value="url" id="rotationModeURL">
-                                <span>URL - Fetch image from URL (random images)</span>
-                            </label>
-                            <div id="imageUrlGroup" class="url-group" style="display: none;">
-                                <div class="url-group-field">
-                                    <label for="imageUrl" class="field-label">Image URL</label>
-                                    <div class="input-with-button">
-                                        <input type="url" id="imageUrl" value="https://loremflickr.com/800/480">
-                                        <button type="button" onclick="document.getElementById('imageUrl').value='https://loremflickr.com/800/480'">Reset</button>
-                                    </div>
-                                    <small class="helper-text">
-                                        💡 Default URL provides random images. You can change this to any image URL.
-                                    </small>
-                                </div>
-                                <div class="url-group-divider">
-                                    <label class="checkbox-with-desc">
-                                        <input type="checkbox" id="saveDownloadedImages" checked>
-                                        <div>
-                                            <span class="checkbox-desc-title">Save downloaded images to Downloads album</span>
-                                            <small class="checkbox-desc-text">
-                                                When enabled, downloaded images are saved to SD card in the "Downloads" album.
-                                            </small>
-                                        </div>
-                                    </label>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                    
-                    <div class="form-group">
-                        <button type="button" id="rotateBtn" class="btn btn-secondary">
-                            Rotate Now
-                        </button>
-                        <div id="rotateStatus" class="status-spacing"></div>
-                    </div>
-                </div>
-                
-                <!-- Power Management Section -->
-                <div class="settings-section-divider">
-                    <div class="form-group">
-                        <label class="checkbox-label">
-                            <input type="checkbox" id="deepSleepEnabled" checked>
-                            <span>Enable Deep Sleep</span>
-                        </label>
-                        <small class="helper-text">
-                            When disabled, webapp stays accessible even if device is battery-powered. This will consume more power.
-                        </small>
-                        <div id="deepSleepWarning" class="warning-box" style="display: none;">
-                            <div class="warning-box-title">⚠️ Power Consumption Notice</div>
-                            <small class="warning-box-text">
-                                Disabling deep sleep keeps the HTTP server accessible for Home Assistant integration, but will significantly increase power consumption and reduce battery life. Only disable if the device is permanently powered via USB.
-                            </small>
-                        </div>
-                    </div>
-                </div>
-                
-                <!-- Home Assistant Integration Section -->
-                <div class="settings-section-divider">
-                    <div class="form-group">
-                        <label for="haUrl">Home Assistant URL:</label>
-                        <input type="url" id="haUrl" placeholder="http://homeassistant.local:8123">
-                        <small class="helper-text">
-                            🏠 Optional: Configure Home Assistant integration for dynamic image serving and reporting battery level.
-                        </small>
-                    </div>
-                </div>
-                
-                <button type="submit" class="btn btn-primary">Save Settings</button>
-                <div id="configStatus"></div>
-            </form>
-        </section>
-
-        <section class="card">
-            <h2>Color Palette Calibration</h2>
-            <p class="section-description">
-                Calibrate the measured color palette for your specific E6 display batch. This improves color accuracy during image processing.
+        <!-- Album Selection -->
+        <div style="margin-bottom: 25px">
+          <div
+            style="
+              display: flex;
+              justify-content: space-between;
+              align-items: center;
+              margin-bottom: 15px;
+            "
+          >
+            <p style="color: #666; font-size: 14px; margin: 0">
+              ✓ = Enabled for auto-rotation • Click album to view images
             </p>
-            
-            <div id="currentPalette" class="settings-section">
-                <h3 class="section-subtitle">Current Palette</h3>
-                <p class="step-tip">
-                    You can manually adjust the RGB values (0-255) to fine-tune each color. Changes will be saved when you click the Save button.
-                </p>
-                <div id="currentPaletteColors" class="palette-grid">
-                    <!-- Colors will be populated by JavaScript -->
-                </div>
-                <div id="savePaletteButtonContainer" class="btn-with-margin" style="display: none;">
-                    <button id="savePaletteBtn" class="btn btn-primary">Save Palette Changes</button>
-                    <button id="cancelPaletteBtn" class="btn btn-secondary btn-secondary-margin">Cancel</button>
-                </div>
-                <div id="savePaletteStatus" class="status-message"></div>
-            </div>
-            
-            <div id="calibrationFlow" class="calibration-flow" style="display: none;">
-                <div id="calibrationStep1" class="calibration-step">
-                    <h3 class="section-subtitle">Step 1: Display Calibration Image</h3>
-                    <p class="step-description">
-                        Click the button below to display the calibration pattern on your device. The pattern shows 6 color boxes.
-                    </p>
-                    <div class="button-row">
-                        <button id="displayCalibrationBtn" class="btn btn-primary">Display Calibration Pattern</button>
-                        <button id="skipDisplayBtn" class="btn btn-secondary">Skip (Already Displayed)</button>
-                    </div>
-                    <div id="displayCalibrationStatus" class="status-message"></div>
-                </div>
-                
-                <div id="calibrationStep2" class="calibration-step" style="display: none;">
-                    <h3 class="section-subtitle">Step 2: Take Photo</h3>
-                    <p class="step-description">
-                        Place the device under a 5500K light source (daylight or daylight-balanced LED). Take a photo with your phone camera, ensuring the entire display is visible and well-lit. Avoid shadows and reflections.
-                    </p>
-                    <div class="warning-box-important">
-                        <p class="warning-box-important-title">📸 Important:</p>
-                        <p class="warning-box-important-text">
-                            <strong>Crop your photo to show ONLY the color boxes</strong> - no device edges, bezels, or background. This ensures accurate color detection.
-                        </p>
-                    </div>
-                    <div class="info-box">
-                        <p class="info-box-title">Example Photo:</p>
-                        <img src="measurement_sample.jpg" alt="Sample calibration photo" class="info-box-image">
-                        <p class="info-box-caption">Your photo should look similar to this - entire display visible, well-lit, no glare.</p>
-                    </div>
-                    <button id="proceedToUploadBtn" class="btn btn-primary">I've Taken the Photo</button>
-                </div>
-                
-                <div id="calibrationStep3" class="calibration-step" style="display: none;">
-                    <h3 class="section-subtitle">Step 3: Crop & Upload Photo</h3>
-                    <p class="step-description-small">
-                        <strong>Before uploading:</strong> Crop your photo to show only the 6 color boxes - remove all device edges, bezels, and background. This improves color detection accuracy.
-                    </p>
-                    <p class="step-description">
-                        Upload the cropped photo. The system will automatically detect the color boxes and extract the RGB values.
-                    </p>
-                    <input type="file" id="calibrationPhotoInput" accept="image/*" class="btn-with-margin">
-                    <div id="calibrationAnalysisStatus" class="status-message"></div>
-                    <canvas id="calibrationCanvas" class="calibration-canvas" style="display: none;"></canvas>
-                </div>
-                
-                <div id="calibrationStep4" class="calibration-step" style="display: none;">
-                    <h3 class="section-subtitle">Step 4: Review & Save</h3>
-                    <p class="step-description-small">
-                        Review the measured colors below. You can manually adjust the RGB values (0-255) to fine-tune each color.
-                    </p>
-                    <p class="step-tip">
-                        💡 <strong>Tip:</strong> The color swatch updates in real-time as you edit. When satisfied, click Save to store the calibration.
-                    </p>
-                    <div id="measuredPalette" class="palette-grid">
-                    </div>
-                    <div class="button-group">
-                        <button id="cancelCalibrationBtn" class="btn btn-secondary">Cancel</button>
-                        <button id="saveCalibrationBtn" class="btn btn-primary">Save Calibration</button>
-                    </div>
-                    <div id="saveCalibrationStatus" class="status-message"></div>
-                </div>
-            </div>
-            
-            <button id="startCalibrationBtn" class="btn btn-primary btn-with-margin">Start Calibration</button>
-            <button id="resetPaletteBtn" class="btn btn-secondary btn-with-margin">Reset to Defaults</button>
-        </section>
+            <button onclick="createAlbum()" class="btn-primary">
+              + New Album
+            </button>
+          </div>
+          <div id="albumList" class="album-list">
+            <p class="loading">Loading albums...</p>
+          </div>
+        </div>
 
-        <footer>
-            <p>ESP32-S3 PhotoFrame v1.0</p>
-        </footer>
+        <!-- Image Gallery -->
+        <div style="border-top: 2px solid #e0e0e0; padding-top: 20px">
+          <h3 style="color: #667eea; margin-bottom: 15px; font-size: 1.2rem">
+            <span id="currentAlbumName">Images</span>
+          </h3>
+          <div id="displayStatus" class="display-status" style="display: none">
+            <div class="spinner"></div>
+            <p>Updating display... This may take up to 40 seconds</p>
+          </div>
+          <div id="imageList" class="image-grid">
+            <p class="loading">Loading images...</p>
+          </div>
+        </div>
+        <p>
+          Telegram: In Combined Portrait Mode, two portrait-format JPEG images
+          are combined into a landscape-format BMP, with only the first JPEG
+          being created as a thumbnail for the combined BMP.
+        </p>
+      </section>
+
+      <!-- Hidden file input -->
+      <input
+        type="file"
+        id="fileInput"
+        accept=".jpg,.jpeg,.png,.heic,.heif,.webp,.gif,.bmp"
+        style="display: none"
+      />
+
+      <section class="card" id="imageProcessingSection" style="display: none">
+        <h2>Image Processing</h2>
+
+        <!-- Preview and Controls Area -->
+        <div id="previewArea" style="display: none">
+          <div class="preview-container">
+            <div
+              class="comparison-container"
+              style="flex: 0 0 auto; padding: 0; background: transparent"
+            >
+              <h3 style="text-align: center; margin-bottom: 15px; color: #333">
+                Drag the slider to compare
+              </h3>
+              <div class="comparison-wrapper" id="comparisonWrapper">
+                <div class="canvas-container">
+                  <canvas id="originalCanvas"></canvas>
+                  <canvas id="previewCanvas"></canvas>
+                  <div class="slider-container" id="sliderContainer">
+                    <div class="slider-handle">⟷</div>
+                  </div>
+                </div>
+              </div>
+              <div class="comparison-labels">
+                <span>← Original</span>
+                <span>Dithered Preview →</span>
+              </div>
+            </div>
+            <div
+              class="curve-canvas-wrapper"
+              style="display: flex; flex-direction: column; gap: 15px"
+            >
+              <div>
+                <canvas id="curveCanvas" width="300" height="300"></canvas>
+                <div class="preview-label">S-Curve Tone Mapping</div>
+              </div>
+
+              <!-- S-Curve Controls (Advanced) - Under Curve Canvas -->
+              <div
+                id="scurveControls"
+                style="
+                  background: #f8f9fa;
+                  padding: 15px;
+                  border-radius: 8px;
+                  border: 1px solid #e0e0e0;
+                "
+              >
+                <div
+                  style="font-weight: 600; margin-bottom: 12px; color: #667eea"
+                >
+                  S-Curve Parameters
+                </div>
+                <div style="display: flex; flex-direction: column; gap: 15px">
+                  <div class="form-group">
+                    <label for="scurveStrength"
+                      >Strength: <span id="strengthValue"></span
+                    ></label>
+                    <input
+                      type="range"
+                      id="scurveStrength"
+                      min="0"
+                      max="1"
+                      step="0.1"
+                    />
+                    <small
+                      >Overall tone mapping strength (0=linear, 1=strong)</small
+                    >
+                  </div>
+
+                  <div class="form-group">
+                    <label for="scurveShadow"
+                      >Shadow Boost: <span id="shadowValue"></span
+                    ></label>
+                    <input
+                      type="range"
+                      id="scurveShadow"
+                      min="0"
+                      max="1"
+                      step="0.1"
+                    />
+                    <small>Brighten shadow areas (higher=brighter)</small>
+                  </div>
+
+                  <div class="form-group">
+                    <label for="scurveHighlight"
+                      >Highlight Compress: <span id="highlightValue"></span
+                    ></label>
+                    <input
+                      type="range"
+                      id="scurveHighlight"
+                      min="0.5"
+                      max="5"
+                      step="0.1"
+                    />
+                    <small
+                      >Protect highlights from over-exposure (higher=more
+                      protection)</small
+                    >
+                  </div>
+
+                  <div class="form-group">
+                    <label for="scurveMidpoint"
+                      >Midpoint: <span id="midpointValue"></span
+                    ></label>
+                    <input
+                      type="range"
+                      id="scurveMidpoint"
+                      min="0.3"
+                      max="0.7"
+                      step="0.05"
+                    />
+                    <small>Where to split shadows/highlights</small>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Row 1: Processing Algorithm & Color Matching Method -->
+          <div class="controls-grid" style="margin-bottom: 20px">
+            <div class="form-group">
+              <label>Processing Algorithm:</label>
+              <div style="margin-top: 8px">
+                <label style="display: block; margin-bottom: 5px">
+                  <input
+                    type="radio"
+                    name="processingMode"
+                    value="enhanced"
+                    style="margin-right: 5px"
+                  />
+                  Enhanced (Our Algorithm)
+                </label>
+                <label style="display: block">
+                  <input
+                    type="radio"
+                    name="processingMode"
+                    value="stock"
+                    style="margin-right: 5px"
+                  />
+                  Stock (Waveshare Original)
+                </label>
+              </div>
+              <small
+                >Stock mode uses simple dithering without tone mapping</small
+              >
+            </div>
+
+            <div class="form-group" id="colorMethodControl">
+              <label>Color Matching Method:</label>
+              <div style="margin-top: 8px">
+                <label style="display: block; margin-bottom: 5px">
+                  <input
+                    type="radio"
+                    name="colorMethod"
+                    value="rgb"
+                    style="margin-right: 5px"
+                  />
+                  Simple RGB (default)
+                </label>
+                <label style="display: block">
+                  <input
+                    type="radio"
+                    name="colorMethod"
+                    value="lab"
+                    style="margin-right: 5px"
+                  />
+                  LAB Color Space (better for grayscale)
+                </label>
+              </div>
+            </div>
+          </div>
+
+          <div id="enhancedControls">
+            <!-- Row 2: Exposure & Saturation -->
+            <div class="controls-grid" style="margin-bottom: 20px">
+              <div class="form-group">
+                <label for="exposure"
+                  >Exposure: <span id="exposureValue"></span
+                ></label>
+                <input
+                  type="range"
+                  id="exposure"
+                  min="0.5"
+                  max="2.0"
+                  step="0.1"
+                />
+                <small>Overall brightness (1.0=normal, >1.0=brighter)</small>
+              </div>
+
+              <div class="form-group">
+                <label for="saturation"
+                  >Saturation: <span id="saturationValue"></span
+                ></label>
+                <input
+                  type="range"
+                  id="saturation"
+                  min="0.5"
+                  max="2"
+                  step="0.1"
+                />
+                <small>Color vibrancy (1.0=normal, >1.0=more vibrant)</small>
+              </div>
+            </div>
+
+            <!-- Row 3: Tone Mapping Selection and Contrast Control -->
+            <div class="controls-grid" style="margin-bottom: 20px">
+              <div class="form-group">
+                <label>Tone Mapping:</label>
+                <div style="margin-top: 8px">
+                  <label style="display: block; margin-bottom: 5px">
+                    <input
+                      type="radio"
+                      name="toneMode"
+                      value="scurve"
+                      style="margin-right: 5px"
+                    />
+                    S-Curve (Advanced)
+                  </label>
+                  <label style="display: block">
+                    <input
+                      type="radio"
+                      name="toneMode"
+                      value="contrast"
+                      style="margin-right: 5px"
+                    />
+                    Contrast (Simple)
+                  </label>
+                </div>
+              </div>
+
+              <!-- Contrast Control (Simple) -->
+              <div
+                id="contrastControl"
+                class="form-group"
+                style="display: none"
+              >
+                <label for="contrast"
+                  >Contrast: <span id="contrastValue"></span
+                ></label>
+                <input
+                  type="range"
+                  id="contrast"
+                  min="0.5"
+                  max="2.0"
+                  step="0.1"
+                />
+                <small>Tonal range (1.0=normal, >1.0=more contrast)</small>
+              </div>
+            </div>
+          </div>
+
+          <div class="button-group">
+            <button type="button" id="discardImage" class="btn btn-secondary">
+              Discard
+            </button>
+            <button type="button" id="resetParams" class="btn btn-secondary">
+              Reset to Defaults
+            </button>
+            <button type="button" id="uploadProcessed" class="btn btn-primary">
+              Upload to Device
+            </button>
+          </div>
+
+          <div
+            id="uploadProgress"
+            style="display: none; margin-top: 15px; text-align: center"
+          >
+            <div style="font-size: 1.1rem; color: #667eea; margin-bottom: 10px">
+              ⏳ Uploading...
+            </div>
+            <div style="font-size: 0.9rem; color: #666">
+              Please wait, do not close this page
+            </div>
+          </div>
+        </div>
+
+        <!-- Status Messages -->
+        <div id="uploadStatus" style="margin-top: 15px"></div>
+      </section>
+
+      <section class="card">
+        <h2>Color Palette Calibration</h2>
+        <p style="color: #666; margin-bottom: 20px">
+          Calibrate the measured color palette for your specific E6 display
+          batch. This improves color accuracy during image processing.
+        </p>
+
+        <div id="currentPalette" style="margin-bottom: 20px">
+          <h3 style="font-size: 1.1rem; margin-bottom: 10px">
+            Current Palette
+          </h3>
+          <p style="color: #666; margin-bottom: 15px; font-size: 0.9rem">
+            You can manually adjust the RGB values (0-255) to fine-tune each
+            color. Changes will be saved when you click the Save button.
+          </p>
+          <div
+            id="currentPaletteColors"
+            style="
+              display: grid;
+              grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+              gap: 10px;
+              margin-bottom: 15px;
+            "
+          >
+            <!-- Colors will be populated by JavaScript -->
+          </div>
+          <div
+            id="savePaletteButtonContainer"
+            style="display: none; margin-top: 15px"
+          >
+            <button id="savePaletteBtn" class="btn btn-primary">
+              Save Palette Changes
+            </button>
+            <button
+              id="cancelPaletteBtn"
+              class="btn btn-secondary"
+              style="margin-left: 10px"
+            >
+              Cancel
+            </button>
+          </div>
+          <div id="savePaletteStatus" style="margin-top: 10px"></div>
+        </div>
+
+        <div
+          id="calibrationFlow"
+          style="
+            display: none;
+            margin-top: 20px;
+            padding: 20px;
+            background: #f8f9fa;
+            border-radius: 8px;
+          "
+        >
+          <div id="calibrationStep1" class="calibration-step">
+            <h3 style="font-size: 1.1rem; margin-bottom: 10px">
+              Step 1: Display Calibration Image
+            </h3>
+            <p style="color: #666; margin-bottom: 15px">
+              Click the button below to display the calibration pattern on your
+              device. The pattern shows 6 color boxes.
+            </p>
+            <div style="display: flex; gap: 10px; margin-bottom: 10px">
+              <button id="displayCalibrationBtn" class="btn btn-primary">
+                Display Calibration Pattern
+              </button>
+              <button id="skipDisplayBtn" class="btn btn-secondary">
+                Skip (Already Displayed)
+              </button>
+            </div>
+            <div id="displayCalibrationStatus" style="margin-top: 10px"></div>
+          </div>
+
+          <div
+            id="calibrationStep2"
+            class="calibration-step"
+            style="display: none"
+          >
+            <h3 style="font-size: 1.1rem; margin-bottom: 10px">
+              Step 2: Take Photo
+            </h3>
+            <p style="color: #666; margin-bottom: 15px">
+              Place the device under a 5500K light source (daylight or
+              daylight-balanced LED). Take a photo with your phone camera,
+              ensuring the entire display is visible and well-lit. Avoid shadows
+              and reflections.
+            </p>
+            <div
+              style="
+                margin-bottom: 15px;
+                padding: 10px;
+                background: #fff3cd;
+                border-left: 4px solid #ffc107;
+                border-radius: 4px;
+              "
+            >
+              <p style="font-weight: 600; margin-bottom: 8px; color: #856404">
+                📸 Important:
+              </p>
+              <p style="font-size: 0.95rem; color: #856404; margin: 0">
+                <strong>Crop your photo to show ONLY the color boxes</strong> -
+                no device edges, bezels, or background. This ensures accurate
+                color detection.
+              </p>
+            </div>
+            <div
+              style="
+                margin-bottom: 15px;
+                padding: 10px;
+                background: #f8f9fa;
+                border-radius: 4px;
+              "
+            >
+              <p style="font-weight: 600; margin-bottom: 8px; color: #495057">
+                Example Photo:
+              </p>
+              <img
+                src="measurement_sample.jpg"
+                alt="Sample calibration photo"
+                style="
+                  max-width: 100%;
+                  border: 1px solid #ddd;
+                  border-radius: 4px;
+                "
+              />
+              <p style="font-size: 0.9rem; color: #6c757d; margin-top: 8px">
+                Your photo should look similar to this - entire display visible,
+                well-lit, no glare.
+              </p>
+            </div>
+            <button id="proceedToUploadBtn" class="btn btn-primary">
+              I've Taken the Photo
+            </button>
+          </div>
+
+          <div
+            id="calibrationStep3"
+            class="calibration-step"
+            style="display: none"
+          >
+            <h3 style="font-size: 1.1rem; margin-bottom: 10px">
+              Step 3: Crop & Upload Photo
+            </h3>
+            <p style="color: #666; margin-bottom: 10px">
+              <strong>Before uploading:</strong> Crop your photo to show only
+              the 6 color boxes - remove all device edges, bezels, and
+              background. This improves color detection accuracy.
+            </p>
+            <p style="color: #666; margin-bottom: 15px">
+              Upload the cropped photo. The system will automatically detect the
+              color boxes and extract the RGB values.
+            </p>
+            <input
+              type="file"
+              id="calibrationPhotoInput"
+              accept="image/*"
+              style="margin-bottom: 15px"
+            />
+            <div id="calibrationAnalysisStatus" style="margin-top: 10px"></div>
+            <canvas
+              id="calibrationCanvas"
+              style="
+                display: none;
+                max-width: 100%;
+                margin-top: 15px;
+                border: 1px solid #ddd;
+              "
+            ></canvas>
+          </div>
+
+          <div
+            id="calibrationStep4"
+            class="calibration-step"
+            style="display: none"
+          >
+            <h3 style="font-size: 1.1rem; margin-bottom: 10px">
+              Step 4: Review & Save
+            </h3>
+            <p style="color: #666; margin-bottom: 10px">
+              Review the measured colors below. You can manually adjust the RGB
+              values (0-255) to fine-tune each color.
+            </p>
+            <p style="color: #666; margin-bottom: 15px; font-size: 0.9rem">
+              💡 <strong>Tip:</strong> The color swatch updates in real-time as
+              you edit. When satisfied, click Save to store the calibration.
+            </p>
+            <div
+              id="measuredPalette"
+              style="
+                display: grid;
+                grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+                gap: 10px;
+                margin-bottom: 15px;
+              "
+            ></div>
+            <div class="button-group">
+              <button id="cancelCalibrationBtn" class="btn btn-secondary">
+                Cancel
+              </button>
+              <button id="saveCalibrationBtn" class="btn btn-primary">
+                Save Calibration
+              </button>
+            </div>
+            <div id="saveCalibrationStatus" style="margin-top: 10px"></div>
+          </div>
+        </div>
+
+        <button
+          id="startCalibrationBtn"
+          class="btn btn-primary"
+          style="margin-top: 15px"
+        >
+          Start Calibration
+        </button>
+        <button
+          id="resetPaletteBtn"
+          class="btn btn-secondary"
+          style="margin-top: 15px"
+        >
+          Reset to Defaults
+        </button>
+      </section>
+
+      <section class="card">
+        <h2>Power & Auto-Rotate Settings</h2>
+        <form id="configForm">
+          <div class="form-group">
+            <label>
+              <input type="checkbox" id="autoRotate" />
+              Enable Auto-Rotate
+            </label>
+          </div>
+          <div class="form-group">
+            <label for="rotateInterval">Rotation Interval (seconds):</label>
+            <input
+              type="number"
+              id="rotateInterval"
+              min="10"
+              max="86400"
+              value="3600"
+            />
+          </div>
+          <div class="form-group">
+            <label>Rotation Mode:</label>
+            <div style="margin-top: 8px">
+              <label style="display: block; margin-bottom: 8px">
+                <input
+                  type="radio"
+                  name="rotationMode"
+                  value="sdcard"
+                  id="rotationModeSDCard"
+                  checked
+                />
+                SD Card - Rotate through images on SD card
+              </label>
+              <label style="display: block; margin-bottom: 8px">
+                <input
+                  type="radio"
+                  name="rotationMode"
+                  value="url"
+                  id="rotationModeURL"
+                />
+                URL - Fetch image from URL (random images)
+              </label>
+              <div
+                id="imageUrlGroup"
+                style="
+                  display: none;
+                  margin-left: 24px;
+                  margin-top: 12px;
+                  padding: 16px;
+                  background: #f8f9fa;
+                  border-radius: 8px;
+                  border: 1px solid #e0e0e0;
+                "
+              >
+                <div style="margin-bottom: 12px">
+                  <label
+                    for="imageUrl"
+                    style="
+                      font-weight: 500;
+                      display: block;
+                      margin-bottom: 6px;
+                      color: #333;
+                    "
+                    >Image URL</label
+                  >
+                  <div style="display: flex; align-items: stretch; gap: 8px">
+                    <input
+                      type="url"
+                      id="imageUrl"
+                      value="https://loremflickr.com/800/480"
+                      style="
+                        flex: 1;
+                        padding: 8px 12px;
+                        box-sizing: border-box;
+                        border: 1px solid #ccc;
+                        border-radius: 4px;
+                        font-size: 14px;
+                      "
+                    />
+                    <button
+                      type="button"
+                      onclick="document.getElementById('imageUrl').value='https://loremflickr.com/800/480'"
+                      style="
+                        padding: 8px 16px;
+                        white-space: nowrap;
+                        box-sizing: border-box;
+                        background: #fff;
+                        border: 1px solid #ccc;
+                        border-radius: 4px;
+                        cursor: pointer;
+                        font-size: 14px;
+                        font-weight: 500;
+                        color: #555;
+                      "
+                    >
+                      Reset
+                    </button>
+                  </div>
+                  <small
+                    style="
+                      color: #666;
+                      display: block;
+                      margin-top: 6px;
+                      font-size: 12px;
+                    "
+                  >
+                    💡 Default URL provides random images. You can change this
+                    to any image URL.
+                  </small>
+                </div>
+                <div style="padding-top: 12px; border-top: 1px solid #e0e0e0">
+                  <label
+                    style="
+                      display: flex;
+                      align-items: flex-start;
+                      cursor: pointer;
+                    "
+                  >
+                    <input
+                      type="checkbox"
+                      id="saveDownloadedImages"
+                      checked
+                      style="margin-top: 2px; margin-right: 8px"
+                    />
+                    <div>
+                      <span style="font-weight: 500; color: #333"
+                        >Save downloaded images to Downloads album</span
+                      >
+                      <small
+                        style="
+                          color: #666;
+                          display: block;
+                          margin-top: 4px;
+                          font-size: 12px;
+                        "
+                      >
+                        When enabled, downloaded images are saved to SD card in
+                        the "Downloads" album.
+                      </small>
+                    </div>
+                  </label>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div
+            class="form-group"
+            style="
+              margin-top: 20px;
+              padding-top: 20px;
+              border-top: 1px solid #e0e0e0;
+            "
+          >
+            <label>
+              <input type="checkbox" id="deepSleepEnabled" checked />
+              Enable Deep Sleep
+            </label>
+            <div
+              id="deepSleepWarning"
+              style="
+                display: none;
+                margin-top: 10px;
+                padding: 12px;
+                background: #fff3cd;
+                border-left: 4px solid #ffc107;
+                border-radius: 4px;
+              "
+            >
+              <div style="font-weight: 600; color: #856404; margin-bottom: 5px">
+                ⚠️ Power Consumption Notice
+              </div>
+              <small style="color: #856404; line-height: 1.5">
+                Disabling deep sleep keeps the HTTP server accessible for Home
+                Assistant integration, but will significantly increase power
+                consumption and reduce battery life. Only disable if the device
+                is permanently powered via USB.
+              </small>
+            </div>
+          </div>
+          <button type="submit" class="btn btn-primary">Save Settings</button>
+          <div id="configStatus"></div>
+        </form>
+      </section>
+      <!-- Telegram Start -->
+
+      <!-- Telegram Settings -->
+      <section class="card">
+        <h2>📱 Telegram Settings</h2>
+
+        <div class="form-group">
+          <label>Bot Token:</label>
+          <input
+            type="password"
+            id="telegram-token"
+            placeholder="123456:ABC-DEF..."
+          />
+          <button onclick="saveTelegramToken()">Save Token</button>
+          <small style="color: #666; display: block; margin-top: 5px">
+            Get your token from
+            <a href="https://t.me/BotFather" target="_blank">@BotFather</a>
+          </small>
+        </div>
+
+        <div class="form-group">
+          <label>Chat ID:</label>
+          <input
+            type="text"
+            id="telegram-chat-id"
+            placeholder="-1234567890987"
+          />
+          <button onclick="saveTelegramChatId()">Save Chat ID</button>
+        </div>
+
+        <div
+          class="help-text"
+          style="
+            background: #f8f9fa;
+            padding: 15px;
+            border-radius: 8px;
+            margin-top: 15px;
+          "
+        >
+          <strong>How to get your Chat ID:</strong><br />
+          1. Start your bot by sending /start<br />
+          2. Send any message to the bot<br />
+          3. The bot will reply with your Chat ID<br />
+          4. Copy the Chat ID and paste it above
+        </div>
+
+        <div id="telegram-status" style="margin-top: 15px"></div>
+      </section>
+
+      <!-- Telegram End -->
+
+      <footer>
+        <p>ESP32-S3 PhotoFrame v1.9x Telegram</p>
+      </footer>
     </div>
 
     <script src="https://cdn.jsdelivr.net/npm/heic2any@0.0.4/dist/heic2any.min.js"></script>
+    <!-- Telegram START -->
+    <script>
+      // Load Telegram settings on page load
+      async function loadTelegramSettings() {
+        try {
+          // Load Chat ID
+          const chatResponse = await fetch("/api/telegram/chat_id");
+          const chatData = await chatResponse.json();
+          if (chatData.configured) {
+            document.getElementById("telegram-chat-id").value =
+              chatData.chat_id;
+          }
+
+          // NEU: Load Token (masked)
+          const tokenResponse = await fetch("/api/telegram/config");
+          const tokenData = await tokenResponse.json();
+          if (tokenData.configured) {
+            // Show masked token or placeholder
+            document.getElementById("telegram-token").placeholder =
+              tokenData.token_masked || "Token configured";
+          }
+        } catch (error) {
+          console.error("Failed to load Telegram settings:", error);
+        }
+      }
+
+      // Save Telegram Token
+      async function saveTelegramToken() {
+        const token = document.getElementById("telegram-token").value.trim();
+        if (!token) {
+          alert("Please enter a Bot Token");
+          return;
+        }
+
+        // Basic validation: Telegram tokens are in format 123456789:ABC-DEF...
+        if (!token.match(/^\d+:[A-Za-z0-9_-]+$/)) {
+          alert("Invalid token format. Should be like: 123456789:ABC-DEF...");
+          return;
+        }
+
+        try {
+          const response = await fetch("/api/telegram/config", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ token: token }),
+          });
+
+          const data = await response.json();
+
+          if (response.ok && data.status === "success") {
+            alert("✅ Bot Token saved successfully");
+            document.getElementById("telegram-token").value = ""; // Clear input
+            loadTelegramSettings(); // Reload to show masked token
+          } else {
+            alert("❌ Failed to save Bot Token");
+          }
+        } catch (error) {
+          alert("❌ Error: " + error.message);
+        }
+      }
+
+      // Save Telegram Chat ID
+      async function saveTelegramChatId() {
+        const chatId = document.getElementById("telegram-chat-id").value.trim();
+        if (!chatId) {
+          alert("Please enter a Chat ID");
+          return;
+        }
+
+        try {
+          const response = await fetch("/api/telegram/chat_id", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ chat_id: chatId }),
+          });
+
+          if (response.ok) {
+            alert("✅ Chat ID saved successfully");
+          } else {
+            alert("❌ Failed to save Chat ID");
+          }
+        } catch (error) {
+          alert("❌ Error: " + error.message);
+        }
+      }
+
+      // Call on page load
+      window.addEventListener("load", loadTelegramSettings);
+    </script>
+
+    <!-- Telegram END -->
     <script type="module" src="image-processor.js"></script>
     <script type="module" src="app.js"></script>
-</body>
+  </body>
 </html>

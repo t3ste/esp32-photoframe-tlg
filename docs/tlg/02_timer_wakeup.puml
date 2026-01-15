@@ -1,0 +1,108 @@
+@startuml ESP32_PhotoFrame_Timer_Wakeup
+title ESP32-S3 Photo Frame - Timer Wakeup Flow (Auto-Rotate)
+
+start
+
+:Timer Wakeup Triggered;
+note right
+  Wakeup Cause: ESP_SLEEP_WAKEUP_TIMER
+  Auto-rotate interval reached
+end note
+
+:Reset Display Update Flags;
+note right
+  displaywasupdatedbytelegram = false
+  pendingdisplayupdate = false
+end note
+
+if (Rotation Mode?) then (URL Mode)
+  :Initialize WiFi;
+  if (WiFi Connected?) then (Yes)
+    :Download Image from URL;
+    if (Download Success?) then (Yes)
+      :Display Downloaded Image;
+    else (No)
+      :Fallback to SD Card Rotation;
+    endif
+  else (No)
+    :Fallback to SD Card Rotation;
+  endif
+  :Stop WiFi;
+  :Enter Deep Sleep;
+  stop
+
+else (SD Card Mode)
+  :Initialize Telegram Bot;
+
+  if (check_telegram_on_timer_wakeup
+Enabled?) then (Yes)
+    if (Telegram Token
+Configured?) then (Yes)
+      :Initialize WiFi;
+
+      if (WiFi Connected?) then (Yes)
+        :Check Telegram Updates;
+
+        if (Updates Found?) then (Yes)
+          :Set pendingdisplayupdate = true;
+
+          if (notify_on_timer_wakeup
+Enabled?) then (Yes)
+            :Send Battery Warning
+(if battery < 20%);
+          endif
+
+          :Start Telegram Polling Task;
+          note right
+            60-second timeout
+            Processes commands
+            Updates display if commanded
+          end note
+
+          :Wait for Polling Complete;
+
+          if (Display Updated
+by Telegram?) then (Yes)
+            :displaywasupdatedbytelegram = true;
+          else (No)
+            :Execute Postponed Display Update;
+          endif
+
+        else (No Updates)
+          if (notify_on_timer_wakeup
+Enabled?) then (Yes)
+            :Send Wake-up Notification;
+          endif
+
+          if (notify_on_display_update
+Enabled?) then (Yes)
+            :Get Next Image Path;
+            :Send Display Update Notification
+with Thumbnail;
+            :Wait for Upload Complete;
+          endif
+
+          :Stop WiFi;
+          :Display Next Image;
+        endif
+
+      else (WiFi Failed)
+        :Display Next Image
+(SD Card);
+      endif
+
+    else (No Token)
+      :Display Next Image
+(SD Card);
+    endif
+
+  else (Telegram Check Disabled)
+    :Display Next Image
+(SD Card);
+  endif
+
+  :Enter Deep Sleep;
+  stop
+endif
+
+@enduml

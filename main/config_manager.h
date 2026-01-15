@@ -23,7 +23,4 @@ rotation_mode_t config_manager_get_rotation_mode(void);
 void config_manager_set_save_downloaded_images(bool enabled);
 bool config_manager_get_save_downloaded_images(void);
 
-void config_manager_set_ha_url(const char *url);
-const char *config_manager_get_ha_url(void);
-
 #endif

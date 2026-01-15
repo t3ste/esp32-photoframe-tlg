@@ -10,8 +10,6 @@ Node.js CLI tool that shares the exact same image processing code (`image-proces
 - **Dual Output Modes**: Render with theoretical (bright) or measured (preview) palette
 - **Portrait Rotation**: Automatically rotates portrait images 90° clockwise
 - **Thumbnail Generation**: Creates thumbnails just like the web interface
-- **Folder Processing**: Automatically processes entire album directory structures
-- **Device Parameters**: Fetch processing settings and calibrated palette from your device
 
 ## Installation
 
@@ -21,7 +19,7 @@ npm install
 ```
 
 **System Requirements:**
-- Node.js 14+ up to Node.js 20 (dependencies are no longer supported for higher versions)
+- Node.js 14+ 
 - macOS/Linux: Install Cairo dependencies (see below)
 
 **macOS:**
@@ -35,8 +33,6 @@ sudo apt-get install build-essential libcairo2-dev libpango1.0-dev libjpeg-dev l
 ```
 
 ## Usage
-
-### Single File Processing
 
 Basic usage:
 ```bash
@@ -58,67 +54,27 @@ Preview mode (render with measured palette):
 node cli.js input.jpg --render-measured -o preview/
 ```
 
-### Folder Processing (Batch Albums)
-
-Process entire album directory structure:
-```bash
-node cli.js ~/Photos/Albums -o output/
-```
-
-The CLI automatically detects directories and processes all subdirectories as albums:
-```
-Input structure:          Output structure:
-Albums/                   output/
-├── Vacation/            ├── Vacation/
-│   ├── photo1.jpg       │   ├── photo1.bmp
-│   └── photo2.jpg       │   ├── photo1.jpg (thumbnail)
-└── Family/              │   ├── photo2.bmp
-    └── photo3.jpg       │   └── photo2.jpg
-                          └── Family/
-                              ├── photo3.bmp
-                              └── photo3.jpg
-```
-
-### Using Device Parameters
-
-Fetch processing settings and calibrated palette from your device:
-```bash
-node cli.js input.jpg --device-parameters
-
-# Works with folders too
-node cli.js ~/Photos/Albums --device-parameters -o output/
-
-# Specify device hostname/IP
-node cli.js input.jpg --device-parameters --device-host 192.168.1.100
-```
-
 ## Options
 
 ```
 Usage: photoframe-process [options] <input>
 
 Arguments:
-  input                          Input image file or directory with album subdirectories
+  input                       Input image file (JPEG/PNG)
 
 Options:
-  -V, --version                  output the version number
-  -o, --output-dir <dir>         Output directory (default: ".")
-  --suffix <suffix>              Suffix to add to output filename (single file mode only) (default: "")
-  --no-thumbnail                 Skip thumbnail generation
-  --device-parameters            Fetch processing parameters from device
-  --device-host <host>           Device hostname or IP address (default: "photoframe.local")
-  --exposure <value>             Exposure multiplier (0.5-2.0, 1.0=normal) (default: 1.0)
-  --saturation <value>           Saturation multiplier (0.5-2.0, 1.0=normal) (default: 1.3)
-  --tone-mode <mode>             Tone mapping mode: scurve or contrast (default: "scurve")
-  --contrast <value>             Contrast multiplier for simple mode (0.5-2.0, 1.0=normal) (default: 1.0)
-  --scurve-strength <value>      S-curve overall strength (0.0-1.0) (default: 0.9)
-  --scurve-shadow <value>        S-curve shadow boost (0.0-1.0) (default: 0.0)
-  --scurve-highlight <value>     S-curve highlight compress (0.5-5.0) (default: 1.5)
-  --scurve-midpoint <value>      S-curve midpoint (0.3-0.7) (default: 0.5)
-  --color-method <method>        Color matching: rgb or lab (default: "rgb")
-  --render-measured              Render BMP with measured palette colors (darker output for preview)
-  --processing-mode <mode>       Processing algorithm: enhanced (with tone mapping) or stock (Waveshare original) (default: "enhanced")
-  -h, --help                     display help for command
+  -V, --version               output the version number
+  -o, --output-dir <dir>      Output directory (default: ".")
+  --suffix <suffix>           Suffix to add to output filename (default: "")
+  --no-thumbnail              Skip thumbnail generation
+  --scurve-strength <value>   S-curve overall strength (0.0-1.0) (default: 0.9)
+  --scurve-shadow <value>     S-curve shadow boost (0.0-1.0) (default: 0.0)
+  --scurve-highlight <value>  S-curve highlight compress (0.5-3.0) (default: 1.7)
+  --scurve-midpoint <value>   S-curve midpoint (0.3-0.7) (default: 0.5)
+  --saturation <value>        Saturation multiplier (1.0=normal, >1.0=more vibrant) (default: 1.2)
+  --render-measured           Render BMP with measured palette colors (darker output for preview)
+  --processing-mode <mode>    Processing algorithm: enhanced (default, with S-curve) or stock (Waveshare original) (default: "enhanced")
+  -h, --help                  display help for command
 ```
 
 ## Output Files
@@ -151,16 +107,9 @@ For input `photo.jpg`, the tool generates:
 
 ## Examples
 
-### Single File Processing
-
 **Process with default settings:**
 ```bash
 node cli.js vacation.jpg -o ~/photoframe-images/
-```
-
-**Using device parameters (recommended):**
-```bash
-node cli.js photo.jpg --device-parameters -o output/
 ```
 
 **Stronger S-curve for flat images:**
@@ -183,28 +132,29 @@ node cli.js photo.jpg --render-measured -o preview/
 node cli.js photo.jpg --processing-mode stock -o output/
 ```
 
+**Batch process multiple images:**
+```bash
+for img in *.jpg; do
+    node cli.js "$img" -o processed/
+done
+```
+
 **Custom parameters with suffix:**
 ```bash
 node cli.js photo.jpg --scurve-strength 0.8 --saturation 1.3 --suffix "_s08_sat13" -o output/
 # Outputs: photo_s08_sat13.bmp, photo_s08_sat13.jpg
 ```
 
-### Folder Processing
+## Default Parameters
 
-**Process entire album structure with device settings:**
-```bash
-node cli.js ~/Downloads/PhotoFrame --device-parameters -o images/
-```
-
-**Process folder with custom settings:**
-```bash
-node cli.js ~/Photos/Albums --saturation 1.5 --scurve-strength 0.8 -o output/
-```
-
-**Preview entire album structure:**
-```bash
-node cli.js ~/Photos/Albums --render-measured -o preview/
-```
+The CLI uses the same defaults as the webapp:
+- **Processing Mode**: Enhanced (with S-curve tone mapping)
+- **S-Curve Strength**: 0.9 (strong tone mapping)
+- **Shadow Boost**: 0.0 (neutral shadows)
+- **Highlight Compress**: 1.5 (moderate highlight protection)
+- **Midpoint**: 0.5 (balanced shadow/highlight split)
+- **Saturation**: 1.5 (moderate saturation)
+- **Color Method**: RGB (simple Euclidean distance)
 
 ## Output Modes
 

@@ -1,0 +1,85 @@
+@startuml WiFi_Initialization_Flow
+!theme plain
+skinparam backgroundColor #FFFFFF
+
+title WiFi Initialization - All Paths
+
+start
+
+:wifi_manager_init();
+
+if (Check NVS for credentials?) then (FOUND)
+  #LightGreen:Load from NVS;
+  :nvs_get_str("wifi_ssid");
+  :nvs_get_str("wifi_password");
+  :wifi_manager_connect(ssid, password);
+
+  if (Connection successful?) then (YES)
+    #Cyan:**WiFi = CONNECTED**;
+    :Start mDNS service\n(photoframe.local);
+    stop
+  else (FAILED)
+    :Connection timeout;
+    #Red:**WiFi = FAILED**;
+    note right
+      System continues
+      without WiFi
+    end note
+    stop
+  endif
+
+elseif (Check SD card: /sdcard/wifi.txt?) then (FOUND)
+  #LightYellow:Load from SD Card;
+  :Read SSID and Password\nfrom wifi.txt;
+  :wifi_manager_connect(ssid, password);
+
+  if (Connection successful?) then (YES)
+    #LightGreen:Save to NVS;
+    :wifi_manager_save_credentials();
+    :Backup: rename wifi.txt → wifi.bak;
+    #Cyan:**WiFi = CONNECTED**;
+    :Start mDNS service;
+    stop
+  else (FAILED)
+    :Keep wifi.txt on SD card;
+    #Red:**WiFi = FAILED**;
+    note right
+      User can fix credentials
+      and reboot
+    end note
+    stop
+  endif
+
+else (NO CREDENTIALS)
+  #Orange:Start Provisioning AP Mode;
+  :wifi_provisioning_start_ap();
+  :SSID: "PhotoFrame";
+  :Password: "photoframe";
+  :IP: 192.168.4.1;
+
+  :Display on serial log:\n"Connect to WiFi: PhotoFrame"\n"Open: http://192.168.4.1";
+
+  :Wait for user configuration\nvia web interface;
+
+  if (User configures WiFi?) then (YES)
+    :Receive SSID + Password;
+    :wifi_manager_connect();
+
+    if (Connection successful?) then (YES)
+      :Save to NVS;
+      #LightGreen:Credentials stored;
+      :Restart ESP32;
+      stop
+    else (FAILED)
+      :Show error on web interface;
+      :Stay in AP mode;
+      -> Wait for retry;
+    endif
+  else (TIMEOUT / Never configured)
+    :Remain in AP mode;
+    #Orange:**WiFi = AP MODE**;
+    stop
+  endif
+endif
+
+@enduml

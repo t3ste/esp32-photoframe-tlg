@@ -1,0 +1,71 @@
+@startuml ESP32_PhotoFrame_Sleep_Management
+title ESP32-S3 Photo Frame - Sleep & Wake Management
+
+start
+
+:System Running;
+
+partition "Active Mode Monitoring" {
+  :Sleep Timer Task Running;
+  note right
+    Monitors auto-sleep timeout
+    Blinks green LED every 10s
+  end note
+
+  :Rotation Timer Task Running;
+  note right
+    Active rotation when:
+    - USB connected, OR
+    - Deep sleep disabled
+  end note
+
+  if (USB Connected?) then (Yes)
+    :Reset Sleep Timer;
+    note right
+      Device stays awake on USB
+    end note
+
+    if (Auto-Rotate
+Enabled?) then (Yes)
+      :Active Rotation Mode;
+      note right
+        Timer-based rotation
+        No deep sleep cycles
+      end note
+      :Wait Rotation Interval;
+      :Display Next Image;
+      repeat
+    endif
+
+  else (On Battery)
+    if (Deep Sleep
+Enabled?) then (Yes)
+      :Monitor Auto-Sleep Timer;
+      note right
+        Default: 120 seconds
+      end note
+
+      if (Button Press?) then (Yes)
+        :Reset Sleep Timer;
+      endif
+
+      if (Timeout Reached?) then (Yes)
+        :Prepare for Deep Sleep;
+        #pink:[[#enter_sleep Enter Sleep Flow]];
+      endif
+
+    else (Deep Sleep Disabled)
+      if (Auto-Rotate
+Enabled?) then (Yes)
+        :Active Rotation Mode;
+        :Wait Rotation Interval;
+        :Display Next Image;
+        repeat
+      endif
+    endif
+  endif
+}
+
+stop
+
+@enduml

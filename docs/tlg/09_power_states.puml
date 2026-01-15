@@ -1,0 +1,105 @@
+@startuml ESP32_PhotoFrame_Power_States
+title ESP32-S3 Photo Frame - Power State Transitions
+
+[*] --> DeepSleep : Power Off/Reset
+
+state "Deep Sleep" as DeepSleep {
+  [*] --> Sleeping
+  Sleeping : CPU Off
+  Sleeping : Display Off
+  Sleeping : WiFi Off
+  Sleeping : Low Power Mode
+
+  Sleeping --> [*] : Wakeup Event
+}
+
+DeepSleep --> Booting : Timer/Button Wake
+
+state "System Boot" as Booting {
+  [*] --> HardwareInit
+  HardwareInit --> WakeSourceCheck
+  WakeSourceCheck --> [*]
+}
+
+Booting --> TimerWake : TIMER_WAKEUP
+Booting --> KeyButtonWake : KEY_BUTTON
+Booting --> NormalOperation : BOOT/POWER_ON
+
+state "Timer Wake Flow" as TimerWake {
+  [*] --> CheckRotationMode
+  CheckRotationMode --> URLMode : URL Rotation
+  CheckRotationMode --> TelegramCheck : SD Card + Telegram
+  URLMode --> DisplayUpdate
+  TelegramCheck --> TelegramPolling : Updates Found
+  TelegramCheck --> DisplayUpdate : No Updates
+  TelegramPolling --> DisplayUpdate
+  DisplayUpdate --> [*]
+}
+
+state "Key Button Wake" as KeyButtonWake {
+  [*] --> QuickRotation
+  QuickRotation : No WiFi
+  QuickRotation : No Telegram
+  QuickRotation --> [*]
+}
+
+state "Normal Operation" as NormalOperation {
+  [*] --> WiFiInit
+  WiFiInit --> ServerStart
+  ServerStart --> ActiveMode
+
+  state "Active Mode" as ActiveMode {
+    [*] --> Monitoring
+
+    state "Monitoring" as Monitoring {
+      --
+      [*] --> USBCheck
+      USBCheck --> USBConnected : USB Present
+      USBCheck --> BatteryMode : On Battery
+
+      state "USB Connected" as USBConnected {
+        [*] --> StayAwake
+        StayAwake --> ActiveRotation : Auto-Rotate ON
+        ActiveRotation --> StayAwake : Display Update
+      }
+
+      state "Battery Mode" as BatteryMode {
+        [*] --> DeepSleepCheck
+        DeepSleepCheck --> AutoSleepTimer : Deep Sleep ON
+        DeepSleepCheck --> ActiveRotationBat : Deep Sleep OFF
+
+        AutoSleepTimer : 120s countdown
+        AutoSleepTimer --> [*] : Timeout
+
+        ActiveRotationBat : Timer-based rotation
+        ActiveRotationBat --> ActiveRotationBat : Display Update
+      }
+    }
+  }
+
+  ActiveMode --> [*] : Sleep Requested
+}
+
+TimerWake --> DeepSleep : Auto-Sleep
+KeyButtonWake --> DeepSleep : Immediate Sleep
+NormalOperation --> DeepSleep : Auto-Sleep Timer
+
+note right of DeepSleep
+  Wakeup Sources:
+  - Timer (auto-rotate interval)
+  - BOOT button (GPIO)
+  - KEY button (GPIO)
+end note
+
+note right of NormalOperation
+  Active Rotation Conditions:
+  - USB connected, OR
+  - Deep sleep disabled
+
+  Auto-Sleep Trigger:
+  - On battery AND
+  - Deep sleep enabled AND
+  - 120s timeout
+end note
+
+@enduml
