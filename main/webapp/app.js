@@ -2430,3 +2430,51 @@ async function saveTelegramNotificationSettings() {
 
 // Load Telegram notification settings on page load
 loadTelegramNotificationSettings();
+
+// === IMAGE HISTORY MANAGEMENT ===
+
+async function loadImageHistory() {
+  try {
+    const response = await fetch("/api/history");
+    if (!response.ok) throw new Error("Failed to fetch history");
+    const data = await response.json();
+    document.getElementById("historyCount").textContent = data.history_count;
+  } catch (error) {
+    console.error("Error loading history:", error);
+    document.getElementById("historyCount").textContent = "Error";
+  }
+}
+
+async function clearImageHistory() {
+  const statusDiv = document.getElementById("historyStatus");
+  
+  if (!confirm("Are you sure you want to clear the image history? All images will be shown again in random order.")) {
+    return;
+  }
+
+  try {
+    const response = await fetch("/api/history", {
+      method: "DELETE",
+      headers: { "Content-Type": "application/json" },
+    });
+
+    if (response.ok) {
+      const data = await response.json();
+      statusDiv.className = "status-success";
+      statusDiv.textContent = `✅ History cleared! Removed ${data.removed_count} images from history.`;
+      // Reload history count
+      await loadImageHistory();
+      setTimeout(() => {
+        statusDiv.textContent = "";
+      }, 3000);
+    } else {
+      throw new Error("Failed to clear history");
+    }
+  } catch (error) {
+    statusDiv.className = "status-error";
+    statusDiv.textContent = "❌ Error: " + error.message;
+  }
+}
+
+// Load image history on page load
+loadImageHistory();

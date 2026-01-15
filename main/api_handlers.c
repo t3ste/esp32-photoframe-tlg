@@ -292,6 +292,29 @@ esp_err_t api_get_battery(cJSON **response)
     return ESP_OK;
 }
 
+// === IMAGE HISTORY ===
+esp_err_t api_get_history(cJSON **response)
+{
+    int history_count = display_manager_get_history_count();
+
+    *response = cJSON_CreateObject();
+    cJSON_AddNumberToObject(*response, "history_count", history_count);
+
+    return ESP_OK;
+}
+
+esp_err_t api_clear_history(cJSON **response)
+{
+    int history_count = display_manager_get_history_count();
+    display_manager_clear_history();
+
+    *response = cJSON_CreateObject();
+    cJSON_AddNumberToObject(*response, "removed_count", history_count);
+    cJSON_AddStringToObject(*response, "status", "success");
+
+    return ESP_OK;
+}
+
 // ESP_LOGI(TAG, "Battery: %d%%, USB: %s", axp_get_battery_percent(), axp_is_usb_connected() ? "YES"
 // : "NO");
 /*

@@ -28,6 +28,10 @@ esp_err_t api_update_config(cJSON *config, cJSON **response);
 // Battery status
 esp_err_t api_get_battery(cJSON **response);
 
+// Image history
+esp_err_t api_get_history(cJSON **response);
+esp_err_t api_clear_history(cJSON **response);
+
 // Sleep
 // esp_err_t api_trigger_sleep(cJSON **response);
 

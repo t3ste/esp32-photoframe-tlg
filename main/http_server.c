@@ -313,6 +313,40 @@ static esp_err_t portrait_combine_handler(httpd_req_t *req)
     return ESP_FAIL;
 }
 
+// === IMAGE HISTORY HANDLER ===
+static esp_err_t history_handler(httpd_req_t *req)
+{
+    if (req->method == HTTP_GET) {
+        cJSON *response = NULL;
+        if (api_get_history(&response) == ESP_OK) {
+            char *json_str = cJSON_Print(response);
+            httpd_resp_set_type(req, "application/json");
+            httpd_resp_sendstr(req, json_str);
+            free(json_str);
+            cJSON_Delete(response);
+            return ESP_OK;
+        }
+        httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Failed to get history");
+        return ESP_FAIL;
+
+    } else if (req->method == HTTP_DELETE) {
+        cJSON *response = NULL;
+        if (api_clear_history(&response) == ESP_OK) {
+            char *json_str = cJSON_Print(response);
+            httpd_resp_set_type(req, "application/json");
+            httpd_resp_sendstr(req, json_str);
+            free(json_str);
+            cJSON_Delete(response);
+            return ESP_OK;
+        }
+        httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Failed to clear history");
+        return ESP_FAIL;
+    }
+
+    httpd_resp_send_err(req, HTTPD_405_METHOD_NOT_ALLOWED, "Only GET/DELETE");
+    return ESP_FAIL;
+}
+
 // v1.9.0_tlg Telegram END
 static esp_err_t index_handler(httpd_req_t *req)
 {
@@ -2201,6 +2235,13 @@ esp_err_t http_server_init(void)
                                              .handler = portrait_combine_handler,
                                              .user_ctx = NULL};
         httpd_register_uri_handler(server, &portrait_combine_post);
+
+        // Image History
+        httpd_uri_t history_uri = {.uri = "/api/history",
+                                   .method = HTTP_GET | HTTP_DELETE,
+                                   .handler = history_handler,
+                                   .user_ctx = NULL};
+        httpd_register_uri_handler(server, &history_uri);
 
         // v1.9.0_tlg Telegram END
         /*

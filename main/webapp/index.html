@@ -919,6 +919,31 @@
           <div id="telegramNotificationStatus" style="margin-top: 10px"></div>
         </div>
 
+        <!-- Image History Management -->
+        <div
+          style="
+            margin-top: 20px;
+            padding-top: 20px;
+            border-top: 1px solid #e0e0e0;
+          "
+        >
+          <h3 style="font-size: 1rem; color: #333; margin-bottom: 15px">
+            Image History
+          </h3>
+          <div id="historyStats" style="background: #f0f4ff; padding: 15px; border-radius: 8px; margin-bottom: 15px">
+            <p style="margin: 0; font-size: 16px">
+              📊 <strong>Images already displayed:</strong> <span id="historyCount" style="font-weight: bold; color: #667eea">--</span>
+            </p>
+          </div>
+          <p style="color: #666; font-size: 14px; margin: 0 0 15px 0">
+            The system remembers which images were shown and displays only unseen ones until all have been shown. Then it automatically resets.
+          </p>
+          <button type="button" onclick="clearImageHistory()" class="btn btn-danger">
+            🗑️ Clear History
+          </button>
+          <div id="historyStatus" style="margin-top: 10px"></div>
+        </div>
+
         <div
           class="help-text"
           style="
