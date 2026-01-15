@@ -95,7 +95,7 @@ endif
 
 stop
 
-note bottom
+note right
   **Battery Low Mode Summary**
 
   Activation Conditions:
