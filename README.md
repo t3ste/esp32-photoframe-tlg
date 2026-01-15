@@ -1208,14 +1208,6 @@ const char* configmanager_get_image_url(void);
 esp_err_t configmanager_set_image_url(const char *url);
 ```
 
-## License
-
-[Specify your license here]
-
-## Author
-
-[Your name/contact]
-
 ## Changelog
 
 ### v1.9.0_tlg (Current)
