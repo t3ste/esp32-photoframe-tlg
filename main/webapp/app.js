@@ -1302,6 +1302,17 @@ async function loadConfig() {
     document.getElementById("saveDownloadedImages").checked =
       data.save_downloaded_images !== false;
 
+    // Image Processing Settings
+    const brightness = data.brightness_fstop || 0;
+    const contrast = data.contrast || 1.0;
+    document.getElementById("brightness").value = brightness;
+    document.getElementById("brightnessValue").textContent = brightness.toFixed(1);
+    document.getElementById("contrast").value = contrast;
+    document.getElementById("contrastValue").textContent = contrast.toFixed(1);
+
+    // Portrait Combine Mode
+    document.getElementById("combineMode").checked = data.combine_portrait_mode || false;
+
     // Set rotation mode based on backend config
     const rotationMode = data.rotation_mode || "sdcard";
     if (rotationMode === "url") {
@@ -1361,6 +1372,9 @@ document.getElementById("configForm").addEventListener("submit", async (e) => {
   const saveDownloadedImages = document.getElementById(
     "saveDownloadedImages"
   ).checked;
+  const brightness = parseFloat(document.getElementById("brightness").value);
+  const contrast = parseFloat(document.getElementById("contrast").value);
+  const combineMode = document.getElementById("combineMode").checked;
 
   try {
     const response = await fetch(`${API_BASE}/api/config`, {
@@ -1375,6 +1389,9 @@ document.getElementById("configForm").addEventListener("submit", async (e) => {
         image_url: imageUrl,
         deep_sleep_enabled: deepSleepEnabled,
         save_downloaded_images: saveDownloadedImages,
+        brightness_fstop: brightness,
+        contrast: contrast,
+        combine_portrait_mode: combineMode,
       }),
     });
 
@@ -2347,3 +2364,69 @@ document
 
 // Load palette on page load
 loadColorPalette();
+// ===== BRIGHTNESS AND CONTRAST SLIDERS =====
+// Update value display when brightness slider changes
+if (document.getElementById("brightness")) {
+  document.getElementById("brightness").addEventListener("input", (e) => {
+    document.getElementById("brightnessValue").textContent = parseFloat(e.target.value).toFixed(1);
+  });
+}
+
+// Update value display when contrast slider changes
+if (document.getElementById("contrast")) {
+  document.getElementById("contrast").addEventListener("input", (e) => {
+    document.getElementById("contrastValue").textContent = parseFloat(e.target.value).toFixed(1);
+  });
+}
+
+// ===== TELEGRAM NOTIFICATION SETTINGS =====
+async function loadTelegramNotificationSettings() {
+  try {
+    // Load check_on_timer
+    let response = await fetch("/api/telegram/config");
+    if (!response.ok) return;
+    const config = await response.json();
+    
+    document.getElementById("telegramCheckTimer").checked = config.check_on_timer_wakeup || false;
+    document.getElementById("telegramNotifyTimer").checked = config.notify_on_timer_wakeup || false;
+    document.getElementById("telegramNotifyDisplay").checked = config.notify_on_display_update || false;
+    document.getElementById("telegramNotifySleep").checked = config.notify_on_sleep || false;
+  } catch (error) {
+    console.error("Failed to load Telegram notification settings:", error);
+  }
+}
+
+async function saveTelegramNotificationSettings() {
+  const statusDiv = document.getElementById("telegramNotificationStatus");
+  
+  try {
+    const settings = {
+      check_on_timer_wakeup: document.getElementById("telegramCheckTimer").checked,
+      notify_on_timer_wakeup: document.getElementById("telegramNotifyTimer").checked,
+      notify_on_display_update: document.getElementById("telegramNotifyDisplay").checked,
+      notify_on_sleep: document.getElementById("telegramNotifySleep").checked,
+    };
+
+    const response = await fetch("/api/telegram/config", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(settings),
+    });
+
+    if (response.ok) {
+      statusDiv.className = "status-success";
+      statusDiv.textContent = "✅ Notification settings saved successfully";
+      setTimeout(() => {
+        statusDiv.textContent = "";
+      }, 3000);
+    } else {
+      throw new Error("Failed to save settings");
+    }
+  } catch (error) {
+    statusDiv.className = "status-error";
+    statusDiv.textContent = "❌ Error: " + error.message;
+  }
+}
+
+// Load Telegram notification settings on page load
+loadTelegramNotificationSettings();

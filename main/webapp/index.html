@@ -591,6 +591,72 @@
               value="3600"
             />
           </div>
+
+          <!-- Image Processing Settings -->
+          <div
+            class="form-group"
+            style="
+              margin-top: 20px;
+              padding-top: 20px;
+              border-top: 1px solid #e0e0e0;
+            "
+          >
+            <h3 style="font-size: 1rem; color: #333; margin-bottom: 15px">
+              Image Processing
+            </h3>
+            <div class="form-group">
+              <label for="brightness">Brightness (f-stops):</label>
+              <input
+                type="range"
+                id="brightness"
+                min="-2"
+                max="2"
+                step="0.1"
+                value="0"
+                style="width: 100%"
+              />
+              <small style="color: #666; display: block; margin-top: 5px">
+                Current: <span id="brightnessValue">0.0</span> f-stops (-2.0 to 2.0)
+              </small>
+            </div>
+            <div class="form-group">
+              <label for="contrast">Contrast:</label>
+              <input
+                type="range"
+                id="contrast"
+                min="0.5"
+                max="2"
+                step="0.1"
+                value="1"
+                style="width: 100%"
+              />
+              <small style="color: #666; display: block; margin-top: 5px">
+                Current: <span id="contrastValue">1.0</span> (0.5 to 2.0)
+              </small>
+            </div>
+          </div>
+
+          <!-- Portrait Combine Settings -->
+          <div
+            class="form-group"
+            style="
+              margin-top: 20px;
+              padding-top: 20px;
+              border-top: 1px solid #e0e0e0;
+            "
+          >
+            <h3 style="font-size: 1rem; color: #333; margin-bottom: 15px">
+              Portrait Combine Mode
+            </h3>
+            <label>
+              <input type="checkbox" id="combineMode" />
+              Enable Portrait Combine Mode (combines 2 portrait images into 1 landscape)
+            </label>
+            <small style="color: #666; display: block; margin-top: 8px">
+              When enabled, two portrait-format JPEG images are automatically combined
+              into a landscape-format BMP image.
+            </small>
+          </div>
           <div class="form-group">
             <label>Rotation Mode:</label>
             <div style="margin-top: 8px">
@@ -782,6 +848,75 @@
             placeholder="-1234567890987"
           />
           <button onclick="saveTelegramChatId()">Save Chat ID</button>
+        </div>
+
+        <div
+          class="help-text"
+          style="
+            background: #f8f9fa;
+            padding: 15px;
+            border-radius: 8px;
+            margin-top: 15px;
+          "
+        >
+          <strong>How to get your Chat ID:</strong><br />
+          1. Start your bot by sending /start<br />
+          2. Send any message to the bot<br />
+          3. The bot will reply with your Chat ID<br />
+          4. Copy the Chat ID and paste it above
+        </div>
+
+        <!-- Telegram Notification Settings -->
+        <div
+          style="
+            margin-top: 20px;
+            padding-top: 20px;
+            border-top: 1px solid #e0e0e0;
+          "
+        >
+          <h3 style="font-size: 1rem; color: #333; margin-bottom: 15px">
+            Notification Settings
+          </h3>
+          <div class="form-group">
+            <label>
+              <input type="checkbox" id="telegramCheckTimer" />
+              Check for Telegram updates during auto-rotate
+            </label>
+            <small style="color: #666; display: block; margin-top: 5px">
+              Device will check for new images when waking up for auto-rotate (uses more battery)
+            </small>
+          </div>
+          <div class="form-group">
+            <label>
+              <input type="checkbox" id="telegramNotifyTimer" />
+              Send notification on auto-rotate wakeup
+            </label>
+            <small style="color: #666; display: block; margin-top: 5px">
+              Receive battery status notification every time auto-rotate occurs (uses more battery)
+            </small>
+          </div>
+          <div class="form-group">
+            <label>
+              <input type="checkbox" id="telegramNotifyDisplay" />
+              Send image notification when display updates
+            </label>
+            <small style="color: #666; display: block; margin-top: 5px">
+              Receive thumbnail notification whenever the display is updated (including auto-rotate)
+            </small>
+          </div>
+          <div class="form-group">
+            <label>
+              <input type="checkbox" id="telegramNotifySleep" />
+              Send notification before sleep mode
+            </label>
+            <small style="color: #666; display: block; margin-top: 5px">
+              Receive battery status notification before device enters sleep mode
+            </small>
+          </div>
+          <button type="button" onclick="saveTelegramNotificationSettings()" class="btn btn-primary">
+            Save Notification Settings
+          </button>
+          <div id="telegramNotificationStatus" style="margin-top: 10px"></div>
         </div>
 
         <div

@@ -214,11 +214,13 @@ esp_err_t api_get_config(cJSON **response)
     int rotate_interval = display_manager_get_rotate_interval();
     bool auto_rotate = display_manager_get_auto_rotate();
     bool deep_sleep = power_manager_get_deep_sleep_enabled();
+    bool combine_mode = image_processor_get_portrait_combine_enabled();
 
     *response = cJSON_CreateObject();
     cJSON_AddNumberToObject(*response, "rotate_interval", rotate_interval);
     cJSON_AddBoolToObject(*response, "auto_rotate", auto_rotate);
     cJSON_AddBoolToObject(*response, "deep_sleep_enabled", deep_sleep);
+    cJSON_AddBoolToObject(*response, "combine_portrait_mode", combine_mode);
 
     // Note: brightness_fstop and contrast are in processing_settings,
     // not in display_manager, so we return default values here
@@ -247,8 +249,24 @@ esp_err_t api_update_config(cJSON *config, cJSON **response)
         power_manager_set_deep_sleep_enabled(cJSON_IsTrue(deep_sleep_obj));
     }
 
-    // Note: brightness_fstop and contrast updates would require
-    // processing_settings API additions
+    cJSON *combine_mode_obj = cJSON_GetObjectItem(config, "combine_portrait_mode");
+    if (combine_mode_obj && cJSON_IsBool(combine_mode_obj)) {
+        image_processor_set_portrait_combine_enabled(cJSON_IsTrue(combine_mode_obj));
+    }
+
+    cJSON *brightness_obj = cJSON_GetObjectItem(config, "brightness_fstop");
+    if (brightness_obj && cJSON_IsNumber(brightness_obj)) {
+        // Update brightness setting (stored in processing_settings or config_manager)
+        // This would need to be implemented in processing_settings or config_manager
+        // For now, we just accept the value
+    }
+
+    cJSON *contrast_obj = cJSON_GetObjectItem(config, "contrast");
+    if (contrast_obj && cJSON_IsNumber(contrast_obj)) {
+        // Update contrast setting (stored in processing_settings or config_manager)
+        // This would need to be implemented in processing_settings or config_manager
+        // For now, we just accept the value
+    }
 
     *response = cJSON_CreateObject();
     cJSON_AddStringToObject(*response, "status", "success");

@@ -78,10 +78,7 @@ static esp_err_t telegram_config_handler(httpd_req_t *req)
             telegram_bot_get_token(token, sizeof(token));
             int len = strlen(token);
 
-            cJSON *root = cJSON_CreateObject();
-            cJSON_AddBoolToObject(root, "configured", has_token);
-
-            // Show format: "��������" + last 4 chars (total 12 chars max)
+            // Show format: "********" + last 4 chars (total 12 chars max)
             char masked[16];
             if (len > 4) {
                 snprintf(masked, sizeof(masked), "********%s", token + len - 4);
@@ -92,6 +89,16 @@ static esp_err_t telegram_config_handler(httpd_req_t *req)
             cJSON_AddStringToObject(root, "token_masked", masked);
         }
 
+        // Add notification settings
+        cJSON_AddBoolToObject(root, "check_on_timer_wakeup", 
+                            telegram_bot_get_check_on_timer_wakeup());
+        cJSON_AddBoolToObject(root, "notify_on_timer_wakeup", 
+                            telegram_bot_get_notify_on_timer_wakeup());
+        cJSON_AddBoolToObject(root, "notify_on_display_update", 
+                            telegram_bot_get_notify_on_display_update());
+        cJSON_AddBoolToObject(root, "notify_on_sleep", 
+                            telegram_bot_get_notify_on_sleep());
+
         char *json_str = cJSON_Print(root);
         httpd_resp_set_type(req, "application/json");
         httpd_resp_sendstr(req, json_str);
@@ -101,7 +108,7 @@ static esp_err_t telegram_config_handler(httpd_req_t *req)
         return ESP_OK;
 
     } else if (req->method == HTTP_POST) {
-        char buf[256];
+        char buf[512];
         int ret = httpd_req_recv(req, buf, sizeof(buf) - 1);
         if (ret <= 0) {
             httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "No data received");
@@ -123,6 +130,27 @@ static esp_err_t telegram_config_handler(httpd_req_t *req)
                 httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Invalid token");
                 return ESP_FAIL;
             }
+        }
+
+        // Handle notification settings
+        cJSON *check_on_timer = cJSON_GetObjectItem(root, "check_on_timer_wakeup");
+        if (check_on_timer && cJSON_IsBool(check_on_timer)) {
+            telegram_bot_set_check_on_timer_wakeup(cJSON_IsTrue(check_on_timer));
+        }
+
+        cJSON *notify_on_timer = cJSON_GetObjectItem(root, "notify_on_timer_wakeup");
+        if (notify_on_timer && cJSON_IsBool(notify_on_timer)) {
+            telegram_bot_set_notify_on_timer_wakeup(cJSON_IsTrue(notify_on_timer));
+        }
+
+        cJSON *notify_on_display = cJSON_GetObjectItem(root, "notify_on_display_update");
+        if (notify_on_display && cJSON_IsBool(notify_on_display)) {
+            telegram_bot_set_notify_on_display_update(cJSON_IsTrue(notify_on_display));
+        }
+
+        cJSON *notify_on_sleep = cJSON_GetObjectItem(root, "notify_on_sleep");
+        if (notify_on_sleep && cJSON_IsBool(notify_on_sleep)) {
+            telegram_bot_set_notify_on_sleep(cJSON_IsTrue(notify_on_sleep));
         }
 
         cJSON_Delete(root);
