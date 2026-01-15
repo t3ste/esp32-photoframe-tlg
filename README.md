@@ -30,7 +30,7 @@ Legend: :white_check_mark: = Tested and Working | :grey_question: = Untested/In 
 - :white_check_mark: Optional portrait pairing to landscape BMP (auto combine)
 - :white_check_mark: WiFi stopped before display update (saves energy)
 - :white_check_mark: Fallback: gradual increase of init timings
-- :white_check_mark: Local script for batch and combine portrait mode
+- :white_check_mark: Local script for batch process and combine portrait images (creates jpg thumbnails, single bmp, and combined bmp)
 
 #### Power Management
 - :grey_question:Battery <20%: text overlay
@@ -38,9 +38,8 @@ Legend: :white_check_mark: = Tested and Working | :grey_question: = Untested/In 
 
 #### System & Configuration
 - :white_check_mark: Initial read WiFi credentials file from SD card
-- :white_check_mark: Build option to disable logging
+- :white_check_mark: Build option to disable serial logging
 - :white_check_mark: Duplicate check without mapping file (file unique ID)
-- :white_check_mark: Option to disable serial logging
 - :grey_question:WiFi reset via BOOT press (10s) when device active
 - :grey_question:Read WiFi credentials file from SD card via BOOT press (2s)
 
