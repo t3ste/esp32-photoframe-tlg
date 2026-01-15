@@ -101,6 +101,9 @@ esp_err_t telegram_bot_send_message(int64_t chat_id, const char *text);
 
 void telegram_bot_stop_polling(void);
 
+// Reset display flag - call on wakeup or WiFi disconnect to allow next #show to display
+void telegram_bot_reset_display_flag(void);
+
 // Send photo to chat
 esp_err_t telegram_bot_send_photo(int64_t chat_id, const char *photo_path, const char *caption);
 // esp_err_t telegram_bot_send_photo_async(int64_t chat_id, const char *photo_path, const char

@@ -93,6 +93,7 @@ static bool connect_to_wifi_with_timeout(int timeout_seconds, bool suppress_reco
         if (suppress_reconnect) {
             ESP_LOGI(TAG, "Stopping WiFi to prevent reconnect attempts...");
             wifi_manager_stop();
+            telegram_bot_reset_display_flag();  // Reset on WiFi disconnect
         }
 
         return false;
@@ -660,6 +661,7 @@ void app_main(void)
         // Reset flags
         display_was_updated_by_telegram = false;
         pending_display_update = false;
+        telegram_bot_reset_display_flag();  // Reset display flag for next #show
 
         // Check rotation mode
         rotation_mode_t rotation_mode = config_manager_get_rotation_mode();
@@ -804,6 +806,7 @@ void app_main(void)
                         // WiFi trennen
                         ESP_LOGI(TAG, "Disconnecting WiFi...");
                         wifi_manager_stop();
+                        telegram_bot_reset_display_flag();  // Reset on WiFi disconnect
                         vTaskDelay(pdMS_TO_TICKS(500));
 
                         // Display update with preselected image
@@ -853,6 +856,9 @@ void app_main(void)
         ESP_LOGI(TAG, "═════════════════════════════════════════");
         ESP_LOGI(TAG, "");
 
+        // Reset display flag for next #show
+        telegram_bot_reset_display_flag();
+
         // Simple image change without Telegram/WiFi
         display_manager_handle_wakeup();
 
@@ -871,6 +877,8 @@ void app_main(void)
         ESP_LOGI(TAG, "  BOOT BUTTON WAKEUP: Web Interface Mode");
         ESP_LOGI(TAG, "═════════════════════════════════════════");
         ESP_LOGI(TAG, "");
+        // Reset display flag for next #show
+        telegram_bot_reset_display_flag();
         // Continue below with normal initialization
     }
 

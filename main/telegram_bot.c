@@ -122,14 +122,33 @@ static bool notify_on_sleep = false;                // consider dependency to no
 static volatile bool photo_send_in_progress = false;
 static SemaphoreHandle_t photo_send_mutex = NULL;
 
+// Track if an image has been shown in the current update batch
+// Reset when starting to process new batch of updates
+static bool image_already_shown_in_batch = false;
+
+/**
+ * @brief Reset the image display flag for a new batch of updates
+ */
+static void reset_display_flag(void)
+{
+    image_already_shown_in_batch = false;
+    ESP_LOGD(TAG, "Display flag reset - ready for next batch");
+}
+
 /**
  * @brief Check if caption contains display trigger keyword
  * @param caption Caption text to check
- * @return true if should display immediately
+ * @return true if should display immediately (and this is the first #show in batch)
  */
 static bool should_display_immediately(const char *caption)
 {
     if (!caption || strlen(caption) == 0) {
+        return false;
+    }
+
+    // If we already showed an image in this batch, don't show another
+    if (image_already_shown_in_batch) {
+        ESP_LOGD(TAG, "Skipping display - already showed an image in this batch");
         return false;
     }
 
@@ -2403,7 +2422,8 @@ static esp_err_t process_photo_message(cJSON *message)
 
             // Check if should display immediately
             if (caption && should_display_immediately(caption)) {
-                ESP_LOGI(TAG, "Caption contains display trigger - showing image now");
+                ESP_LOGI(TAG, "Caption contains display trigger - showing image now (FIRST in batch)");
+                image_already_shown_in_batch = true;  // Mark that we've shown an image
 
                 // Get album path
                 char album_path[TELEGRAM_MAX_ALBUM_PATH_LENGTH];
@@ -2708,7 +2728,8 @@ static esp_err_t process_document_as_photo(cJSON *message)
 
         // Check if should display immediately
         if (caption && should_display_immediately(caption)) {
-            ESP_LOGI(TAG, "Caption contains display trigger - showing image now");
+            ESP_LOGI(TAG, "Caption contains display trigger - showing image now (FIRST in batch)");
+            image_already_shown_in_batch = true;  // Mark that we've shown an image
 
             // Get album path
             char album_path[TELEGRAM_MAX_ALBUM_PATH_LENGTH];
@@ -3920,6 +3941,7 @@ bool telegram_bot_check_updates(void)
             nvs_close(nvs_handle);
             ESP_LOGI(TAG, "Saved last_update_id to NVS: %" PRId32, last_update_id);
         }
+        reset_display_flag();  // Reset display flag after all updates processed
     }
 
     cJSON_Delete(response);
@@ -3943,6 +3965,7 @@ void telegram_bot_stop_polling(void)
 {
     extern bool telegram_polling_active;
     telegram_polling_active = false;
+    reset_display_flag();  // Reset display flag when stopping polling
     ESP_LOGI(TAG, "Telegram polling stopped");
 }
 
@@ -3963,4 +3986,13 @@ bool telegram_bot_is_sending_photo(void)
     }
 
     return sending;
+}
+
+/**
+ * @brief Reset the display flag - call on wakeup or WiFi disconnect
+ * Allows the next #show command to display an image
+ */
+void telegram_bot_reset_display_flag(void)
+{
+    reset_display_flag();
 }
