@@ -66,6 +66,30 @@ async function loadBatteryStatus() {
 }
 
 // === TELEGRAM NOTIFICATION SETTINGS ===
+// Helper function to update dependent checkbox states based on master checkbox
+function updateTelegramDependencies() {
+  const checkTimerCheckbox = document.getElementById("telegramCheckTimer");
+  const notifyTimerCheckbox = document.getElementById("telegramNotifyTimer");
+  const notifyDisplayCheckbox = document.getElementById("telegramNotifyDisplay");
+  const notifySleepCheckbox = document.getElementById("telegramNotifySleep");
+
+  if (!checkTimerCheckbox) return; // Guard against missing elements
+
+  if (checkTimerCheckbox.checked) {
+    // Master is ON - enable dependent checkboxes (keep their actual values)
+    if (notifyTimerCheckbox) notifyTimerCheckbox.disabled = false;
+    if (notifyDisplayCheckbox) notifyDisplayCheckbox.disabled = false;
+    // notify_on_sleep is always enabled (independent)
+    if (notifySleepCheckbox) notifySleepCheckbox.disabled = false;
+  } else {
+    // Master is OFF - disable dependent checkboxes (keep their actual values, just disabled)
+    if (notifyTimerCheckbox) notifyTimerCheckbox.disabled = true;
+    if (notifyDisplayCheckbox) notifyDisplayCheckbox.disabled = true;
+    // notify_on_sleep is always enabled (independent)
+    if (notifySleepCheckbox) notifySleepCheckbox.disabled = false;
+  }
+}
+
 async function loadTelegramNotificationSettings() {
   try {
     const response = await fetch("/api/telegram/config");
@@ -75,6 +99,9 @@ async function loadTelegramNotificationSettings() {
     document.getElementById("telegramNotifyTimer").checked = config.notify_on_timer_wakeup || false;
     document.getElementById("telegramNotifyDisplay").checked = config.notify_on_display_update || false;
     document.getElementById("telegramNotifySleep").checked = config.notify_on_sleep || false;
+    
+    // Update dependent checkbox states after loading values
+    updateTelegramDependencies();
   } catch (error) {
     console.error("Failed to load Telegram notification settings:", error);
   }
@@ -84,10 +111,13 @@ async function saveTelegramNotificationSettings() {
   const statusDiv = document.getElementById("telegramNotificationStatus");
   
   try {
+    const checkOnTimer = document.getElementById("telegramCheckTimer").checked;
+    
+    // If check_on_timer_wakeup is disabled, force dependent notifications to false
     const settings = {
-      check_on_timer_wakeup: document.getElementById("telegramCheckTimer").checked,
-      notify_on_timer_wakeup: document.getElementById("telegramNotifyTimer").checked,
-      notify_on_display_update: document.getElementById("telegramNotifyDisplay").checked,
+      check_on_timer_wakeup: checkOnTimer,
+      notify_on_timer_wakeup: checkOnTimer ? document.getElementById("telegramNotifyTimer").checked : false,
+      notify_on_display_update: checkOnTimer ? document.getElementById("telegramNotifyDisplay").checked : false,
       notify_on_sleep: document.getElementById("telegramNotifySleep").checked,
     };
 
@@ -2489,4 +2519,13 @@ if (saveTelegramBtn) {
 const clearHistoryBtn = document.getElementById("clearImageHistoryBtn");
 if (clearHistoryBtn) {
   clearHistoryBtn.addEventListener("click", clearImageHistory);
+}
+
+// === Telegram Notification Dependencies ===
+// When check_on_timer_wakeup is toggled, enable/disable dependent checkboxes
+const checkTimerCheckbox = document.getElementById("telegramCheckTimer");
+if (checkTimerCheckbox) {
+  checkTimerCheckbox.addEventListener("change", () => {
+    updateTelegramDependencies();
+  });
 }

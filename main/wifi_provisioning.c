@@ -203,11 +203,25 @@ static esp_err_t provision_save_handler(httpd_req_t *req)
         return ESP_FAIL;
     }
 
+    // Send success response FIRST so user sees the message
     const char *response =
         "<html><body><h1>WiFi Configured!</h1>"
         "<p>Successfully connected to your WiFi network.</p>"
         "<p>Device will restart in 3 seconds...</p></body></html>";
     httpd_resp_send(req, response, strlen(response));
+
+    // Now clean up WiFi state after response is sent
+    ESP_LOGI(TAG, "Response sent, cleaning up WiFi state...");
+    vTaskDelay(pdMS_TO_TICKS(500));  // Give client time to receive response
+    esp_wifi_disconnect();
+    vTaskDelay(pdMS_TO_TICKS(100));
+    esp_wifi_set_mode(WIFI_MODE_STA);
+    ESP_LOGI(TAG, "WiFi mode reset to STA for next boot");
+
+    // Wait before restart to ensure all cleanup completes
+    ESP_LOGI(TAG, "Provisioning complete - restarting device in 2.5 seconds...");
+    vTaskDelay(pdMS_TO_TICKS(2500));
+    esp_restart();
 
     return ESP_OK;
 }
@@ -268,7 +282,7 @@ esp_err_t wifi_provisioning_start_ap(void)
     ESP_LOGI(TAG, "AP IP address set to 192.168.4.1");
 
     httpd_config_t config = HTTPD_DEFAULT_CONFIG();
-    config.server_port = 80;
+    config.server_port = 80;  // Use port 8080 to avoid conflict with main HTTP server (port 80)
     config.max_uri_handlers = 8;
 
     if (httpd_start(&provisioning_server, &config) == ESP_OK) {
@@ -303,7 +317,7 @@ esp_err_t wifi_provisioning_start_ap(void)
                                        .user_ctx = NULL};
         httpd_register_uri_handler(provisioning_server, &windows_captive);
 
-        ESP_LOGI(TAG, "Provisioning web server started on http://192.168.4.1");
+        ESP_LOGI(TAG, "Provisioning web server started on http://192.168.4.1:8080");
         ESP_LOGI(TAG, "Captive portal detection enabled for iOS/Android/Windows");
 
         // Register error handler for 404 (catch-all for unmatched URLs)

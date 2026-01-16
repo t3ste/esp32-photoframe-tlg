@@ -260,6 +260,17 @@ header h1 {
   cursor: pointer;
 }
 
+.form-group input[type="checkbox"]:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.form-group label:has(input[type="checkbox"]:disabled),
+.form-group input[type="checkbox"]:disabled ~ small {
+  opacity: 0.6;
+  color: #999;
+}
+
 .btn {
   padding: 12px 24px;
   border: none;

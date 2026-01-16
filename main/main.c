@@ -40,8 +40,10 @@
 // idf.py fullclean
 // idf.py set-target esp32s3
 // idf.py build
-// opt: idf.py -p PORT flash-erase
-// idf.py -p PORT flash or idf.py -p PORT flash monitor --no-reset
+// idf.py -p PORT erase-flash 
+// idf.py -p PORT flash
+// opt: idf.py -p PORT flash monitor
+// opt: idf.py -p PORT flash monitor --no-reset
 
 static const char *TAG = "main";
 
@@ -893,6 +895,7 @@ void app_main(void)
     char wifi_pass[WIFI_PASS_MAX_LEN] = {0};
     bool credentials_loaded = false;
     bool credentials_from_sd = false;
+    bool provisioning_mode = false;  // Track if we're in provisioning mode
 
     ESP_LOGI(TAG, "Initializing WiFi manager...");
     ESP_ERROR_CHECK(wifi_manager_init());
@@ -932,10 +935,8 @@ if (credentials_loaded) {
 
     */
     if (credentials_loaded) {
-        ESP_LOGI(TAG, "Connecting to WiFi: %s", wifi_ssid);
-        wifi_manager_connect(wifi_ssid, wifi_pass);  // Start connection
-
-        // if (connect_to_wifi_with_timeout(30)) {  // 30 s Timeout
+        ESP_LOGI(TAG, "Attempting WiFi connection: %s", wifi_ssid);
+        // Use timeout-based connection to prevent indefinite blocking
         if (connect_to_wifi_with_timeout(30, false)) {  // Keep WiFi for web interface
             ESP_LOGI(TAG, " WiFi connected successfully");
 
@@ -977,6 +978,7 @@ if (credentials_loaded) {
         ESP_LOGI(TAG, "Starting provisioning AP mode...");
 
         wifi_provisioning_start_ap();
+        provisioning_mode = true;  // Mark that we're in provisioning mode
 
         ESP_LOGI(TAG, "Connect to WiFi: %s (Password: %s)", DEFAULT_WIFI_SSID,
                  DEFAULT_WIFI_PASSWORD);
@@ -1017,127 +1019,134 @@ if (credentials_loaded) {
     }
 
     // ═══════════════════════════════════════════════════════════════════════
-    // HTTP SERVER INITIALIZATION
+    // HTTP SERVER INITIALIZATION - Only if not in provisioning mode
     // ═══════════════════════════════════════════════════════════════════════
-    ESP_ERROR_CHECK(http_server_init());
+    if (!provisioning_mode) {
+        ESP_LOGI(TAG, "Starting HTTP server...");
+        ESP_ERROR_CHECK(http_server_init());
 
-    // ═══════════════════════════════════════════════════════════════════════
-    // TELEGRAM BOT INITIALIZATION (v1.9.0_tlg)
-    // ═══════════════════════════════════════════════════════════════════════
-    ESP_LOGI(TAG, "Initializing Telegram bot...");
-    ESP_ERROR_CHECK(telegram_bot_init());
 
-    if (true) {  // enable POWER-ON NOTIFICATION
-        // ============================================================================
-        // POWER-ON NOTIFICATION (Battery mode only)
-        // ============================================================================
+		// ═══════════════════════════════════════════════════════════════════════
+		// TELEGRAM BOT INITIALIZATION (v1.9.0_tlg)
+		// ═══════════════════════════════════════════════════════════════════════
+		ESP_LOGI(TAG, "Initializing Telegram bot...");
+		ESP_ERROR_CHECK(telegram_bot_init());
 
-        if (reset_reason == ESP_RST_POWERON) {
-            ESP_LOGI(TAG, "");
-            ESP_LOGI(TAG, "==========================================");
-            ESP_LOGI(TAG, "POWER-ON DETECTED - System Started");
-            ESP_LOGI(TAG, "==========================================");
-            ESP_LOGI(TAG, "");
+		if (true) {  // enable POWER-ON NOTIFICATION
+			// ============================================================================
+			// POWER-ON NOTIFICATION (Battery mode only)
+			// ============================================================================
 
-            // Nur Benachrichtigung wenn Telegram aktiv UND kein USB
-            if (telegram_bot_has_token() && !axp_is_usb_connected() &&
-                wifi_manager_is_connected()) {
-                int64_t chat_id = telegram_bot_get_last_chat_id();
-                if (chat_id != 0) {
-                    ESP_LOGI(TAG, "Sending Power-On notification to Telegram...");
+			if (reset_reason == ESP_RST_POWERON) {
+				ESP_LOGI(TAG, "");
+				ESP_LOGI(TAG, "==========================================");
+				ESP_LOGI(TAG, "POWER-ON DETECTED - System Started");
+				ESP_LOGI(TAG, "==========================================");
+				ESP_LOGI(TAG, "");
 
-                    // Hole System-Info
-                    int battery_percent = axp_get_battery_percent();
-                    bool is_charging = axp_is_charging();
-                    int rotate_interval = display_manager_get_rotate_interval();
-                    bool auto_rotate = display_manager_get_auto_rotate();
-                    bool deep_sleep = power_manager_get_deep_sleep_enabled();
+				// Nur Benachrichtigung wenn Telegram aktiv UND kein USB
+				if (telegram_bot_has_token() && !axp_is_usb_connected() &&
+					wifi_manager_is_connected()) {
+					int64_t chat_id = telegram_bot_get_last_chat_id();
+					if (chat_id != 0) {
+						ESP_LOGI(TAG, "Sending Power-On notification to Telegram...");
 
-                    // Baue Nachricht
-                    char message[512];
-                    snprintf(message, sizeof(message),
-                             "🟢 <b>System Started</b>\n"
-                             "\n"
-                             "<b>Power Status</b>\n"
-                             "Battery: %d%%\n"
-                             "Charging: %s\n"
-                             "Power Source: Battery\n"
-                             "\n"
-                             "<b>Configuration</b>\n"
-                             "Auto-Rotate: %s\n"
-                             "Rotation Interval: %d seconds\n"
-                             "Deep Sleep: %s\n"
-                             "\n"
-                             "<b>System Behavior</b>\n"
-                             "Auto-Sleep Timer: %d seconds\n"
-                             "After timeout, system will enter deep sleep.\n"
-                             "Next wakeup in %d seconds for image rotation.",
-                             battery_percent, is_charging ? "Yes" : "No",
-                             auto_rotate ? "Enabled" : "Disabled", rotate_interval,
-                             deep_sleep ? "Enabled" : "Disabled", AUTO_SLEEP_TIMEOUT_SEC,
-                             rotate_interval);
+						// Hole System-Info
+						int battery_percent = axp_get_battery_percent();
+						bool is_charging = axp_is_charging();
+						int rotate_interval = display_manager_get_rotate_interval();
+						bool auto_rotate = display_manager_get_auto_rotate();
+						bool deep_sleep = power_manager_get_deep_sleep_enabled();
 
-                    // Sende Nachricht
-                    esp_err_t err = telegram_bot_send_message(chat_id, message);
-                    if (err == ESP_OK) {
-                        ESP_LOGI(TAG, "Power-On notification sent successfully");
-                    } else {
-                        ESP_LOGW(TAG, "Failed to send Power-On notification");
-                    }
+						// Baue Nachricht
+						char message[512];
+						snprintf(message, sizeof(message),
+								 "🟢 <b>System Started</b>\n"
+								 "\n"
+								 "<b>Power Status</b>\n"
+								 "Battery: %d%%\n"
+								 "Charging: %s\n"
+								 "Power Source: Battery\n"
+								 "\n"
+								 "<b>Configuration</b>\n"
+								 "Auto-Rotate: %s\n"
+								 "Rotation Interval: %d seconds\n"
+								 "Deep Sleep: %s\n"
+								 "\n"
+								 "<b>System Behavior</b>\n"
+								 "Auto-Sleep Timer: %d seconds\n"
+								 "After timeout, system will enter deep sleep.\n"
+								 "Next wakeup in %d seconds for image rotation.",
+								 battery_percent, is_charging ? "Yes" : "No",
+								 auto_rotate ? "Enabled" : "Disabled", rotate_interval,
+								 deep_sleep ? "Enabled" : "Disabled", AUTO_SLEEP_TIMEOUT_SEC,
+								 rotate_interval);
 
-                    // Warte damit Nachricht gesendet wird
-                    vTaskDelay(pdMS_TO_TICKS(2000));
-                }
-            } else {
-                if (!telegram_bot_has_token()) {
-                    ESP_LOGI(TAG, "Telegram not configured - skipping Power-On notification");
-                } else if (axp_is_usb_connected()) {
-                    ESP_LOGI(TAG, "USB connected - skipping Power-On notification");
-                } else if (!wifi_manager_is_connected()) {
-                    ESP_LOGI(TAG, "WiFi not connected - skipping Power-On notification");
-                }
-            }
-        }
-    }
+						// Sende Nachricht
+						esp_err_t err = telegram_bot_send_message(chat_id, message);
+						if (err == ESP_OK) {
+							ESP_LOGI(TAG, "Power-On notification sent successfully");
+						} else {
+							ESP_LOGW(TAG, "Failed to send Power-On notification");
+						}
 
-    if (telegram_bot_has_token()) {
-        // Send wake-up notification for BOOT button wakeup
-        if (power_manager_is_boot_button_wakeup()) {
-            int64_t chat_id = telegram_bot_get_last_chat_id();
-            if (chat_id != 0) {
-                ESP_LOGI(TAG, "Sending BOOT wakeup notification to Telegram...");
-                telegram_bot_notify_wakeup(chat_id);
-            }
-        }
+						// Warte damit Nachricht gesendet wird
+						vTaskDelay(pdMS_TO_TICKS(2000));
+					}
+				} else {
+					if (!telegram_bot_has_token()) {
+						ESP_LOGI(TAG, "Telegram not configured - skipping Power-On notification");
+					} else if (axp_is_usb_connected()) {
+						ESP_LOGI(TAG, "USB connected - skipping Power-On notification");
+					} else if (!wifi_manager_is_connected()) {
+						ESP_LOGI(TAG, "WiFi not connected - skipping Power-On notification");
+					}
+				}
+			}
+		}
 
-        // Start telegram polling task
-        xTaskCreate(telegram_check_task, "telegram_check", 32768, NULL, 5, NULL);
+		if (telegram_bot_has_token()) {
+			// Send wake-up notification for BOOT button wakeup
+			if (power_manager_is_boot_button_wakeup()) {
+				int64_t chat_id = telegram_bot_get_last_chat_id();
+				if (chat_id != 0) {
+					ESP_LOGI(TAG, "Sending BOOT wakeup notification to Telegram...");
+					telegram_bot_notify_wakeup(chat_id);
+				}
+			}
+
+			// Start telegram polling task
+			xTaskCreate(telegram_check_task, "telegram_check", 32768, NULL, 5, NULL);
+		} else {
+			ESP_LOGI(TAG, "No Telegram token configured");
+		}
+
+		// ═══════════════════════════════════════════════════════════════════════
+		// LOG NETWORK INFORMATION
+		// ═══════════════════════════════════════════════════════════════════════
+		if (wifi_manager_is_connected()) {
+			char ip_str[16];
+			wifi_manager_get_ip(ip_str, sizeof(ip_str));
+			vTaskDelay(pdMS_TO_TICKS(2000));
+
+			ESP_LOGI(TAG, "===========================================");
+			ESP_LOGI(TAG, "Web interface available at: http://%s", ip_str);
+			ESP_LOGI(TAG, "Or use: http://photoframe.local");
+			ESP_LOGI(TAG, "===========================================");
+		}
+
+		// ═══════════════════════════════════════════════════════════════════════
+		// START BUTTON TASK
+		// ═══════════════════════════════════════════════════════════════════════
+		xTaskCreate(button_task, "button_task", 12288, NULL, 5, NULL);
+
+		// ═══════════════════════════════════════════════════════════════════════
+		// MARK SYSTEM AS READY
+		// ═══════════════════════════════════════════════════════════════════════
+		http_server_set_ready();
+		ESP_LOGI(TAG, "PhotoFrame started successfully");
+
     } else {
-        ESP_LOGI(TAG, "No Telegram token configured");
+        ESP_LOGI(TAG, "Provisioning mode active - HTTP server will start after provisioning");
     }
-
-    // ═══════════════════════════════════════════════════════════════════════
-    // LOG NETWORK INFORMATION
-    // ═══════════════════════════════════════════════════════════════════════
-    if (wifi_manager_is_connected()) {
-        char ip_str[16];
-        wifi_manager_get_ip(ip_str, sizeof(ip_str));
-        vTaskDelay(pdMS_TO_TICKS(2000));
-
-        ESP_LOGI(TAG, "===========================================");
-        ESP_LOGI(TAG, "Web interface available at: http://%s", ip_str);
-        ESP_LOGI(TAG, "Or use: http://photoframe.local");
-        ESP_LOGI(TAG, "===========================================");
-    }
-
-    // ═══════════════════════════════════════════════════════════════════════
-    // START BUTTON TASK
-    // ═══════════════════════════════════════════════════════════════════════
-    xTaskCreate(button_task, "button_task", 12288, NULL, 5, NULL);
-
-    // ═══════════════════════════════════════════════════════════════════════
-    // MARK SYSTEM AS READY
-    // ═══════════════════════════════════════════════════════════════════════
-    http_server_set_ready();
-    ESP_LOGI(TAG, "PhotoFrame started successfully");
 }
