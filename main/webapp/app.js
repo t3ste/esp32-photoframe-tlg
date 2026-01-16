@@ -65,6 +65,97 @@ async function loadBatteryStatus() {
   }
 }
 
+// === TELEGRAM NOTIFICATION SETTINGS ===
+async function loadTelegramNotificationSettings() {
+  try {
+    const response = await fetch("/api/telegram/config");
+    if (!response.ok) throw new Error("Failed to fetch settings");
+    const config = await response.json();
+    document.getElementById("telegramCheckTimer").checked = config.check_on_timer_wakeup || false;
+    document.getElementById("telegramNotifyTimer").checked = config.notify_on_timer_wakeup || false;
+    document.getElementById("telegramNotifyDisplay").checked = config.notify_on_display_update || false;
+    document.getElementById("telegramNotifySleep").checked = config.notify_on_sleep || false;
+  } catch (error) {
+    console.error("Failed to load Telegram notification settings:", error);
+  }
+}
+
+async function saveTelegramNotificationSettings() {
+  const statusDiv = document.getElementById("telegramNotificationStatus");
+  
+  try {
+    const settings = {
+      check_on_timer_wakeup: document.getElementById("telegramCheckTimer").checked,
+      notify_on_timer_wakeup: document.getElementById("telegramNotifyTimer").checked,
+      notify_on_display_update: document.getElementById("telegramNotifyDisplay").checked,
+      notify_on_sleep: document.getElementById("telegramNotifySleep").checked,
+    };
+
+    const response = await fetch("/api/telegram/config", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(settings),
+    });
+
+    if (response.ok) {
+      statusDiv.className = "status-success";
+      statusDiv.textContent = "✅ Notification settings saved successfully";
+      setTimeout(() => {
+        statusDiv.textContent = "";
+      }, 3000);
+    } else {
+      throw new Error("Failed to save settings");
+    }
+  } catch (error) {
+    statusDiv.className = "status-error";
+    statusDiv.textContent = "❌ Error: " + error.message;
+  }
+}
+
+// === IMAGE HISTORY MANAGEMENT ===
+async function loadImageHistory() {
+  try {
+    const response = await fetch("/api/history");
+    if (!response.ok) throw new Error("Failed to fetch history");
+    const data = await response.json();
+    document.getElementById("historyCount").textContent = data.history_count;
+  } catch (error) {
+    console.error("Error loading history:", error);
+    document.getElementById("historyCount").textContent = "Error";
+  }
+}
+
+async function clearImageHistory() {
+  const statusDiv = document.getElementById("historyStatus");
+  
+  if (!confirm("Are you sure you want to clear the image history? All images will be shown again in random order.")) {
+    return;
+  }
+
+  try {
+    const response = await fetch("/api/history", {
+      method: "DELETE",
+      headers: { "Content-Type": "application/json" },
+    });
+
+    if (response.ok) {
+      const data = await response.json();
+      statusDiv.className = "status-success";
+      statusDiv.textContent = `✅ History cleared! Removed ${data.removed_count} images from history.`;
+      // Reload history count
+      await loadImageHistory();
+      setTimeout(() => {
+        statusDiv.textContent = "";
+      }, 3000);
+    } else {
+      throw new Error("Failed to clear history");
+    }
+  } catch (error) {
+    statusDiv.className = "status-error";
+    statusDiv.textContent = "❌ Error: " + error.message;
+  }
+}
+
 async function loadAlbums() {
   try {
     const response = await fetch(`${API_BASE}/api/albums`);
@@ -953,9 +1044,9 @@ document.getElementById("saturation").addEventListener("input", (e) => {
   scheduleSaveSettings();
 });
 
-document.getElementById("contrast").addEventListener("input", (e) => {
+document.getElementById("contrastProcessing").addEventListener("input", (e) => {
   currentParams.contrast = parseFloat(e.target.value);
-  document.getElementById("contrastValue").textContent = e.target.value;
+  document.getElementById("contrastProcessingValue").textContent = e.target.value;
   updatePreview();
   scheduleSaveSettings();
 });
@@ -1376,23 +1467,30 @@ document.getElementById("configForm").addEventListener("submit", async (e) => {
   const contrast = parseFloat(document.getElementById("contrast").value);
   const combineMode = document.getElementById("combineMode").checked;
 
+  // Debug logging
+  console.log("Form values: brightness=", brightness, "contrast=", contrast);
+
   try {
+    const configData = {
+      auto_rotate: autoRotate,
+      rotate_interval: rotateInterval,
+      rotation_mode: rotationMode,
+      image_url: imageUrl,
+      deep_sleep_enabled: deepSleepEnabled,
+      save_downloaded_images: saveDownloadedImages,
+      brightness_fstop: brightness,
+      contrast: contrast,
+      combine_portrait_mode: combineMode,
+    };
+
+    console.log("Sending config:", JSON.stringify(configData));
+
     const response = await fetch(`${API_BASE}/api/config`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
       },
-      body: JSON.stringify({
-        auto_rotate: autoRotate,
-        rotate_interval: rotateInterval,
-        rotation_mode: rotationMode,
-        image_url: imageUrl,
-        deep_sleep_enabled: deepSleepEnabled,
-        save_downloaded_images: saveDownloadedImages,
-        brightness_fstop: brightness,
-        contrast: contrast,
-        combine_portrait_mode: combineMode,
-      }),
+      body: JSON.stringify(configData),
     });
 
     const data = await response.json();
@@ -1485,6 +1583,8 @@ loadAlbums();
 loadImages();
 loadConfig();
 loadVersion();
+loadTelegramNotificationSettings();
+loadImageHistory();
 
 // Expose createAlbum to global scope for button onclick
 window.createAlbum = createAlbum;
@@ -1590,8 +1690,8 @@ async function loadPersistedSettings() {
       document.getElementById("saturation").value = settings.saturation;
       document.getElementById("saturationValue").textContent =
         settings.saturation.toFixed(1);
-      document.getElementById("contrast").value = settings.contrast;
-      document.getElementById("contrastValue").textContent =
+      document.getElementById("contrastProcessing").value = settings.contrast;
+      document.getElementById("contrastProcessingValue").textContent =
         settings.contrast.toFixed(1);
       document.getElementById("scurveStrength").value = settings.strength;
       document.getElementById("strengthValue").textContent =
@@ -2379,102 +2479,14 @@ if (document.getElementById("contrast")) {
   });
 }
 
-// ===== TELEGRAM NOTIFICATION SETTINGS =====
-async function loadTelegramNotificationSettings() {
-  try {
-    // Load check_on_timer
-    let response = await fetch("/api/telegram/config");
-    if (!response.ok) return;
-    const config = await response.json();
-    
-    document.getElementById("telegramCheckTimer").checked = config.check_on_timer_wakeup || false;
-    document.getElementById("telegramNotifyTimer").checked = config.notify_on_timer_wakeup || false;
-    document.getElementById("telegramNotifyDisplay").checked = config.notify_on_display_update || false;
-    document.getElementById("telegramNotifySleep").checked = config.notify_on_sleep || false;
-  } catch (error) {
-    console.error("Failed to load Telegram notification settings:", error);
-  }
+// Event listeners for Telegram Notification and History buttons
+// These need to be set up here AFTER functions are defined to avoid ReferenceError
+const saveTelegramBtn = document.getElementById("saveTelegramNotificationSettingsBtn");
+if (saveTelegramBtn) {
+  saveTelegramBtn.addEventListener("click", saveTelegramNotificationSettings);
 }
 
-async function saveTelegramNotificationSettings() {
-  const statusDiv = document.getElementById("telegramNotificationStatus");
-  
-  try {
-    const settings = {
-      check_on_timer_wakeup: document.getElementById("telegramCheckTimer").checked,
-      notify_on_timer_wakeup: document.getElementById("telegramNotifyTimer").checked,
-      notify_on_display_update: document.getElementById("telegramNotifyDisplay").checked,
-      notify_on_sleep: document.getElementById("telegramNotifySleep").checked,
-    };
-
-    const response = await fetch("/api/telegram/config", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(settings),
-    });
-
-    if (response.ok) {
-      statusDiv.className = "status-success";
-      statusDiv.textContent = "✅ Notification settings saved successfully";
-      setTimeout(() => {
-        statusDiv.textContent = "";
-      }, 3000);
-    } else {
-      throw new Error("Failed to save settings");
-    }
-  } catch (error) {
-    statusDiv.className = "status-error";
-    statusDiv.textContent = "❌ Error: " + error.message;
-  }
+const clearHistoryBtn = document.getElementById("clearImageHistoryBtn");
+if (clearHistoryBtn) {
+  clearHistoryBtn.addEventListener("click", clearImageHistory);
 }
-
-// Load Telegram notification settings on page load
-loadTelegramNotificationSettings();
-
-// === IMAGE HISTORY MANAGEMENT ===
-
-async function loadImageHistory() {
-  try {
-    const response = await fetch("/api/history");
-    if (!response.ok) throw new Error("Failed to fetch history");
-    const data = await response.json();
-    document.getElementById("historyCount").textContent = data.history_count;
-  } catch (error) {
-    console.error("Error loading history:", error);
-    document.getElementById("historyCount").textContent = "Error";
-  }
-}
-
-async function clearImageHistory() {
-  const statusDiv = document.getElementById("historyStatus");
-  
-  if (!confirm("Are you sure you want to clear the image history? All images will be shown again in random order.")) {
-    return;
-  }
-
-  try {
-    const response = await fetch("/api/history", {
-      method: "DELETE",
-      headers: { "Content-Type": "application/json" },
-    });
-
-    if (response.ok) {
-      const data = await response.json();
-      statusDiv.className = "status-success";
-      statusDiv.textContent = `✅ History cleared! Removed ${data.removed_count} images from history.`;
-      // Reload history count
-      await loadImageHistory();
-      setTimeout(() => {
-        statusDiv.textContent = "";
-      }, 3000);
-    } else {
-      throw new Error("Failed to clear history");
-    }
-  } catch (error) {
-    statusDiv.className = "status-error";
-    statusDiv.textContent = "❌ Error: " + error.message;
-  }
-}
-
-// Load image history on page load
-loadImageHistory();

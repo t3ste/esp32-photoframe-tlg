@@ -135,22 +135,30 @@ static esp_err_t telegram_config_handler(httpd_req_t *req)
         // Handle notification settings
         cJSON *check_on_timer = cJSON_GetObjectItem(root, "check_on_timer_wakeup");
         if (check_on_timer && cJSON_IsBool(check_on_timer)) {
-            telegram_bot_set_check_on_timer_wakeup(cJSON_IsTrue(check_on_timer));
+            bool val = cJSON_IsTrue(check_on_timer);
+            telegram_bot_set_check_on_timer_wakeup(val);
+            ESP_LOGI(TAG, "Set check_on_timer_wakeup: %d", val);
         }
 
         cJSON *notify_on_timer = cJSON_GetObjectItem(root, "notify_on_timer_wakeup");
         if (notify_on_timer && cJSON_IsBool(notify_on_timer)) {
-            telegram_bot_set_notify_on_timer_wakeup(cJSON_IsTrue(notify_on_timer));
+            bool val = cJSON_IsTrue(notify_on_timer);
+            telegram_bot_set_notify_on_timer_wakeup(val);
+            ESP_LOGI(TAG, "Set notify_on_timer_wakeup: %d", val);
         }
 
         cJSON *notify_on_display = cJSON_GetObjectItem(root, "notify_on_display_update");
         if (notify_on_display && cJSON_IsBool(notify_on_display)) {
-            telegram_bot_set_notify_on_display_update(cJSON_IsTrue(notify_on_display));
+            bool val = cJSON_IsTrue(notify_on_display);
+            telegram_bot_set_notify_on_display_update(val);
+            ESP_LOGI(TAG, "Set notify_on_display_update: %d", val);
         }
 
         cJSON *notify_on_sleep = cJSON_GetObjectItem(root, "notify_on_sleep");
         if (notify_on_sleep && cJSON_IsBool(notify_on_sleep)) {
-            telegram_bot_set_notify_on_sleep(cJSON_IsTrue(notify_on_sleep));
+            bool val = cJSON_IsTrue(notify_on_sleep);
+            telegram_bot_set_notify_on_sleep(val);
+            ESP_LOGI(TAG, "Set notify_on_sleep: %d", val);
         }
 
         cJSON_Delete(root);
@@ -317,6 +325,7 @@ static esp_err_t portrait_combine_handler(httpd_req_t *req)
 static esp_err_t history_handler(httpd_req_t *req)
 {
     if (req->method == HTTP_GET) {
+        ESP_LOGI(TAG, "GET /api/history");
         cJSON *response = NULL;
         if (api_get_history(&response) == ESP_OK) {
             char *json_str = cJSON_Print(response);
@@ -330,6 +339,7 @@ static esp_err_t history_handler(httpd_req_t *req)
         return ESP_FAIL;
 
     } else if (req->method == HTTP_DELETE) {
+        ESP_LOGI(TAG, "DELETE /api/history - Clearing image history");
         cJSON *response = NULL;
         if (api_clear_history(&response) == ESP_OK) {
             char *json_str = cJSON_Print(response);
@@ -337,9 +347,12 @@ static esp_err_t history_handler(httpd_req_t *req)
             httpd_resp_sendstr(req, json_str);
             free(json_str);
             cJSON_Delete(response);
+            ESP_LOGI(TAG, "History cleared successfully");
             return ESP_OK;
         }
         httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Failed to clear history");
+        ESP_LOGE(TAG, "Failed to clear history");
+
         return ESP_FAIL;
     }
 
@@ -1276,6 +1289,16 @@ static esp_err_t config_handler(httpd_req_t *req)
         const char *image_url = config_manager_get_image_url();
         rotation_mode_t rotation_mode = config_manager_get_rotation_mode();
         bool save_downloaded_images = config_manager_get_save_downloaded_images();
+        bool combine_mode = image_processor_get_portrait_combine_enabled();
+
+        // Load processing settings for brightness and contrast
+        processing_settings_t ps_settings;
+        float brightness_fstop = 0.0;
+        float contrast_val = 1.0;
+        if (processing_settings_load(&ps_settings) == ESP_OK) {
+            brightness_fstop = ps_settings.exposure;
+            contrast_val = ps_settings.contrast;
+        }
 
         cJSON *root = cJSON_CreateObject();
         cJSON_AddNumberToObject(root, "rotate_interval", rotate_interval);
@@ -1285,6 +1308,9 @@ static esp_err_t config_handler(httpd_req_t *req)
         cJSON_AddStringToObject(root, "rotation_mode",
                                 rotation_mode == ROTATION_MODE_URL ? "url" : "sdcard");
         cJSON_AddBoolToObject(root, "save_downloaded_images", save_downloaded_images);
+        cJSON_AddBoolToObject(root, "combine_portrait_mode", combine_mode);
+        cJSON_AddNumberToObject(root, "brightness_fstop", brightness_fstop);
+        cJSON_AddNumberToObject(root, "contrast", contrast_val);
 
         char *json_str = cJSON_Print(root);
         httpd_resp_set_type(req, "application/json");
@@ -1295,7 +1321,7 @@ static esp_err_t config_handler(httpd_req_t *req)
 
         return ESP_OK;
     } else if (req->method == HTTP_POST) {
-        char buf[256];
+        char buf[512];
         int ret = httpd_req_recv(req, buf, sizeof(buf) - 1);
         if (ret <= 0) {
             httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "No data received");
@@ -1303,61 +1329,38 @@ static esp_err_t config_handler(httpd_req_t *req)
         }
         buf[ret] = '\0';
 
+        // Debug: Log raw JSON
+        ESP_LOGI(TAG, "Received config JSON: %s", buf);
+
         cJSON *root = cJSON_Parse(buf);
         if (!root) {
             httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Invalid JSON");
             return ESP_FAIL;
         }
 
-        cJSON *interval_obj = cJSON_GetObjectItem(root, "rotate_interval");
-        if (interval_obj && cJSON_IsNumber(interval_obj)) {
-            display_manager_set_rotate_interval(interval_obj->valueint);
-            power_manager_reset_rotate_timer();
-        }
-
-        cJSON *auto_rotate_obj = cJSON_GetObjectItem(root, "auto_rotate");
-        if (auto_rotate_obj && cJSON_IsBool(auto_rotate_obj)) {
-            display_manager_set_auto_rotate(cJSON_IsTrue(auto_rotate_obj));
-        }
-
-        cJSON *deep_sleep_obj = cJSON_GetObjectItem(root, "deep_sleep_enabled");
-        if (deep_sleep_obj && cJSON_IsBool(deep_sleep_obj)) {
-            power_manager_set_deep_sleep_enabled(cJSON_IsTrue(deep_sleep_obj));
-        }
-
-        cJSON *image_url_obj = cJSON_GetObjectItem(root, "image_url");
-        if (image_url_obj && cJSON_IsString(image_url_obj)) {
-            const char *url = cJSON_GetStringValue(image_url_obj);
-            config_manager_set_image_url(url);
-        }
-
-        cJSON *rotation_mode_obj = cJSON_GetObjectItem(root, "rotation_mode");
-        if (rotation_mode_obj && cJSON_IsString(rotation_mode_obj)) {
-            const char *mode_str = cJSON_GetStringValue(rotation_mode_obj);
-            rotation_mode_t mode =
-                (strcmp(mode_str, "url") == 0) ? ROTATION_MODE_URL : ROTATION_MODE_SDCARD;
-            config_manager_set_rotation_mode(mode);
-        }
-
-        cJSON *save_dl_obj = cJSON_GetObjectItem(root, "save_downloaded_images");
-        if (save_dl_obj && cJSON_IsBool(save_dl_obj)) {
-            bool save_dl = cJSON_IsTrue(save_dl_obj);
-            config_manager_set_save_downloaded_images(save_dl);
-        }
-
+        // Use api_update_config to handle all config updates
+        cJSON *response_json = NULL;
+        esp_err_t err = api_update_config(root, &response_json);
         cJSON_Delete(root);
 
-        cJSON *response = cJSON_CreateObject();
-        cJSON_AddStringToObject(response, "status", "success");
+        if (err == ESP_OK) {
+            cJSON *response = cJSON_CreateObject();
+            cJSON_AddStringToObject(response, "status", "success");
 
-        char *json_str = cJSON_Print(response);
-        httpd_resp_set_type(req, "application/json");
-        httpd_resp_sendstr(req, json_str);
+            char *json_str = cJSON_Print(response);
+            httpd_resp_set_type(req, "application/json");
+            httpd_resp_sendstr(req, json_str);
 
-        free(json_str);
-        cJSON_Delete(response);
+            free(json_str);
+            cJSON_Delete(response);
+            if (response_json) cJSON_Delete(response_json);
 
-        return ESP_OK;
+            return ESP_OK;
+        } else {
+            httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Failed to update config");
+            if (response_json) cJSON_Delete(response_json);
+            return ESP_FAIL;
+        }
     }
 
     httpd_resp_send_err(req, HTTPD_405_METHOD_NOT_ALLOWED, "Method not allowed");
@@ -2236,12 +2239,19 @@ esp_err_t http_server_init(void)
                                              .user_ctx = NULL};
         httpd_register_uri_handler(server, &portrait_combine_post);
 
-        // Image History
-        httpd_uri_t history_uri = {.uri = "/api/history",
-                                   .method = HTTP_GET | HTTP_DELETE,
-                                   .handler = history_handler,
-                                   .user_ctx = NULL};
-        httpd_register_uri_handler(server, &history_uri);
+        // Image History - GET
+        httpd_uri_t history_get_uri = {.uri = "/api/history",
+                                       .method = HTTP_GET,
+                                       .handler = history_handler,
+                                       .user_ctx = NULL};
+        httpd_register_uri_handler(server, &history_get_uri);
+
+        // Image History - DELETE
+        httpd_uri_t history_delete_uri = {.uri = "/api/history",
+                                          .method = HTTP_DELETE,
+                                          .handler = history_handler,
+                                          .user_ctx = NULL};
+        httpd_register_uri_handler(server, &history_delete_uri);
 
         // v1.9.0_tlg Telegram END
         /*

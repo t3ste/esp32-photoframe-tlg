@@ -140,8 +140,8 @@ esp_err_t processing_settings_load(processing_settings_t *settings)
     nvs_close(nvs_handle);
 
     ESP_LOGI(TAG, "Processing settings loaded from NVS");
-    ESP_LOGI(TAG, "  exposure=%.1f, saturation=%.1f, tone_mode=%s", settings->exposure,
-             settings->saturation, settings->tone_mode);
+    ESP_LOGI(TAG, "  exposure=%.1f, saturation=%.1f, contrast=%.1f, tone_mode=%s", 
+             settings->exposure, settings->saturation, settings->contrast, settings->tone_mode);
 
     return ESP_OK;
 }

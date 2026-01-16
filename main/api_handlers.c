@@ -9,10 +9,12 @@
 #include "album_manager.h"
 #include "axp_prot.h"
 #include "config.h"
+#include "config_manager.h"  // <- for image_url and rotation_mode
 #include "display_manager.h"
 #include "esp_log.h"
 #include "image_processor.h"  // <- for portrait mode
 #include "power_manager.h"
+#include "processing_settings.h"  // <- for brightness/contrast
 // #include <stdbool.h>
 
 static const char *TAG __attribute__((unused)) = "api_handlers";
@@ -216,17 +218,19 @@ esp_err_t api_get_config(cJSON **response)
     bool deep_sleep = power_manager_get_deep_sleep_enabled();
     bool combine_mode = image_processor_get_portrait_combine_enabled();
 
+    // Load processing settings for brightness and contrast
+    processing_settings_t settings;
+    esp_err_t ps_err = processing_settings_load(&settings);
+    float brightness_fstop = (ps_err == ESP_OK) ? settings.exposure : 0.0;
+    float contrast = (ps_err == ESP_OK) ? settings.contrast : 1.0;
+
     *response = cJSON_CreateObject();
     cJSON_AddNumberToObject(*response, "rotate_interval", rotate_interval);
     cJSON_AddBoolToObject(*response, "auto_rotate", auto_rotate);
     cJSON_AddBoolToObject(*response, "deep_sleep_enabled", deep_sleep);
     cJSON_AddBoolToObject(*response, "combine_portrait_mode", combine_mode);
-
-    // Note: brightness_fstop and contrast are in processing_settings,
-    // not in display_manager, so we return default values here
-    // You may need to add API to processing_settings to get current values
-    cJSON_AddNumberToObject(*response, "brightness_fstop", 0.3);
-    cJSON_AddNumberToObject(*response, "contrast", 1.3);
+    cJSON_AddNumberToObject(*response, "brightness_fstop", brightness_fstop);
+    cJSON_AddNumberToObject(*response, "contrast", contrast);
 
     return ESP_OK;
 }
@@ -249,23 +253,55 @@ esp_err_t api_update_config(cJSON *config, cJSON **response)
         power_manager_set_deep_sleep_enabled(cJSON_IsTrue(deep_sleep_obj));
     }
 
+    cJSON *image_url_obj = cJSON_GetObjectItem(config, "image_url");
+    if (image_url_obj && cJSON_IsString(image_url_obj)) {
+        config_manager_set_image_url(cJSON_GetStringValue(image_url_obj));
+    }
+
+    cJSON *rotation_mode_obj = cJSON_GetObjectItem(config, "rotation_mode");
+    if (rotation_mode_obj && cJSON_IsString(rotation_mode_obj)) {
+        const char *mode_str = cJSON_GetStringValue(rotation_mode_obj);
+        rotation_mode_t mode = (strcmp(mode_str, "url") == 0) ? ROTATION_MODE_URL : ROTATION_MODE_SDCARD;
+        config_manager_set_rotation_mode(mode);
+    }
+
+    cJSON *save_dl_obj = cJSON_GetObjectItem(config, "save_downloaded_images");
+    if (save_dl_obj && cJSON_IsBool(save_dl_obj)) {
+        config_manager_set_save_downloaded_images(cJSON_IsTrue(save_dl_obj));
+    }
+
     cJSON *combine_mode_obj = cJSON_GetObjectItem(config, "combine_portrait_mode");
     if (combine_mode_obj && cJSON_IsBool(combine_mode_obj)) {
         image_processor_set_portrait_combine_enabled(cJSON_IsTrue(combine_mode_obj));
     }
 
+    // Handle brightness and contrast (stored in processing_settings)
     cJSON *brightness_obj = cJSON_GetObjectItem(config, "brightness_fstop");
-    if (brightness_obj && cJSON_IsNumber(brightness_obj)) {
-        // Update brightness setting (stored in processing_settings or config_manager)
-        // This would need to be implemented in processing_settings or config_manager
-        // For now, we just accept the value
-    }
-
     cJSON *contrast_obj = cJSON_GetObjectItem(config, "contrast");
-    if (contrast_obj && cJSON_IsNumber(contrast_obj)) {
-        // Update contrast setting (stored in processing_settings or config_manager)
-        // This would need to be implemented in processing_settings or config_manager
-        // For now, we just accept the value
+    
+    if ((brightness_obj && cJSON_IsNumber(brightness_obj)) || 
+        (contrast_obj && cJSON_IsNumber(contrast_obj))) {
+        // Load current settings
+        processing_settings_t settings;
+        if (processing_settings_load(&settings) != ESP_OK) {
+            processing_settings_get_defaults(&settings);
+        }
+        
+        // Update brightness (maps to exposure)
+        if (brightness_obj && cJSON_IsNumber(brightness_obj)) {
+            settings.exposure = (float)brightness_obj->valuedouble;
+            ESP_LOGI(TAG, "Updated exposure: %.2f", settings.exposure);
+        }
+        
+        // Update contrast
+        if (contrast_obj && cJSON_IsNumber(contrast_obj)) {
+            settings.contrast = (float)contrast_obj->valuedouble;
+            ESP_LOGI(TAG, "Updated contrast: %.2f", settings.contrast);
+        }
+        
+        // Save updated settings
+        esp_err_t err = processing_settings_save(&settings);
+        ESP_LOGI(TAG, "Processing settings save result: %s", esp_err_to_name(err));
     }
 
     *response = cJSON_CreateObject();
